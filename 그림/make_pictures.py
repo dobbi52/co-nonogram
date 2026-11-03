@@ -22,7 +22,7 @@ def tune_scene(kind, fill, seed):
         for pr in range(rc.H // P):
             for pc in range(rc.W // P):
                 g = [[1 if fill[pr * P + r][pc * P + c] else 0 for c in range(P)] for r in range(P)]
-                jobs.append((g, lo, hi, seed * 1000 + pr * 100 + pc + (0 if lv == 'normal' else 7)))
+                jobs.append((g, lo, hi, seed * 1000 + pr * 100 + pc + {'normal': 0, 'hard': 7, 'easy': 13}[lv]))
         with Pool(2) as pool:
             res = pool.map(rc.tune, jobs)
         f2 = [row[:] for row in fill]
@@ -67,7 +67,7 @@ def main():
     with open('../js/pictures.js', 'w', encoding='utf-8') as f:
         f.write('// 그림 데이터. 그림/make_pictures.py로 만든다. 직접 고치지 않는다.\n')
         f.write('// 대문자는 칠하는 칸, 소문자는 비우는 칸. 글자 종류가 칠판 색을 정한다.\n')
-        f.write('// levels.normal: 조각마다 4회, levels.hard: 조각마다 5회 훑어야 풀린다.\n')
+        f.write('// levels.easy: 조각마다 3회, levels.normal: 4회, levels.hard: 5회 훑어야 풀린다.\n')
         f.write('// crop: 작은 판으로 잘라 쓸 위치(조각 단위 [가로, 세로]). 없으면 js/game.js의 기본값.\n')
         f.write('export const PICTURES = [\n')
         for item in out:

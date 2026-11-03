@@ -6,14 +6,14 @@
 - 대문자는 칠하는 칸, 소문자는 비우는 칸. 글자 종류가 칠판에 나타날 색을 정한다.
 - 칠한 칸과 빈칸은 같은 영역 안에서 비슷한 색이라, 칸을 뒤집어도 그림은 그대로 보인다.
 - 난이도: 가로줄 전체 → 세로줄 전체를 한 번 훑는 것을 1회로 세어, 다 풀리기까지 걸리는 횟수.
-  보통 3~5회, 어려움 4~6회. 추측 없이 힌트만으로 풀려야 한다.
+  쉬움 3회, 보통 3~5회(4회로 맞춤), 어려움 4~6회(5회로 맞춤). 추측 없이 힌트만으로 풀려야 한다.
 """
 import json, math, random, sys
 from multiprocessing import Pool
 from PIL import Image
 
 W, H, P = 60, 50, 10
-LEVELS = {'normal': (3, 5), 'hard': (4, 6)}
+LEVELS = {'easy': (3, 3), 'normal': (3, 5), 'hard': (4, 6)}  # 쉬움 3회, 보통 4회, 어려움 5회를 목표로 맞춘다
 DENS = (0.35, 0.78)
 
 PAL = {
@@ -261,13 +261,13 @@ def main():
         for pr in range(H // P):
             for pc in range(W // P):
                 g = [[1 if fill[pr * P + r][pc * P + c] else 0 for c in range(P)] for r in range(P)]
-                jobs.append((g, lo, hi, pr * 100 + pc + (0 if lv == 'normal' else 7)))
+                jobs.append((g, lo, hi, pr * 100 + pc + {'normal': 0, 'hard': 7, 'easy': 13}[lv]))
         with Pool(2) as pool:
             res = pool.map(tune, jobs)
         f2 = [row[:] for row in fill]
         stats = []
         for (g, best, n, tries), (_, _, _, sd) in zip(res, jobs):
-            pr, pc = sd // 100, (sd % 100) - (0 if lv == 'normal' else 7)
+            pr, pc = sd // 100, (sd % 100) - {'normal': 0, 'hard': 7, 'easy': 13}[lv]
             for r in range(P):
                 for c in range(P):
                     f2[pr * P + r][pc * P + c] = bool(g[r][c])
@@ -282,7 +282,7 @@ def main():
         for y in range(H):
             for x in range(W):
                 img.putpixel((x, y), tuple(int(PAL[rows[y][x]][i:i + 2], 16) for i in (1, 3, 5)))
-        img.resize((W * 12, H * 12), Image.NEAREST).save('roof-cat.png' if lv == 'normal' else 'roof-cat-hard.png')
+        img.resize((W * 12, H * 12), Image.NEAREST).save({'normal': 'roof-cat.png', 'hard': 'roof-cat-hard.png', 'easy': 'roof-cat-easy.png'}[lv])
     json.dump(out, open('roof-cat.json', 'w'), ensure_ascii=False, indent=0)
 
 

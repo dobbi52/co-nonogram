@@ -135,6 +135,13 @@ input.codein{font-family:var(--px);font-size:24px;letter-spacing:8px;width:200px
 .tile.pick{cursor:pointer}
 .tile.pick:hover,.tile.pick:focus-visible{border:2px solid var(--blue);outline:none}
 
+.chip.end{background:var(--pink);border-color:var(--pink);color:var(--ink)}
+button.chip{cursor:pointer;color:var(--fg)}
+.notice.paused{border-color:var(--yellow);margin-bottom:12px;color:var(--fg)}
+.nono.teach .c{cursor:pointer}
+.pausebox{border:4px solid var(--yellow);background:var(--panel);padding:22px;display:flex;flex-direction:column;gap:10px;text-align:center}
+.pausebox h3{margin:0;font-weight:normal;font-size:30px;color:var(--yellow)}
+
 /* 완성 */
 .result{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
 .result h2{margin:0;font-weight:normal;font-size:34px;color:var(--green)}
@@ -207,3 +214,6 @@ input.codein{font-family:var(--px);font-size:24px;letter-spacing:8px;width:200px
   .brand h1{font-size:24px}
 }
 @media (prefers-reduced-motion:reduce){.tile.flash{animation:none}}
+.lvseg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.lvseg button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;line-height:1.2}
+.lvseg button .dim{font-size:14px}

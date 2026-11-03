@@ -13,35 +13,47 @@ export const LAYOUTS = [
   { n: 25, c: 5, r: 5, ox: 1, oy: 0 },
   { n: 30, c: 6, r: 5, ox: 0, oy: 0 },
 ];
+// 학생이 들어올 때 각자 고른다. 조각의 난이도는 그 조각을 처음 맡은 학생의 난이도를 따른다
 export const LEVELS = {
-  normal: { name: '보통', note: '조각마다 3~5회 훑어야 풀려요' },
-  hard: { name: '어려움', note: '조각마다 4~6회 훑어야 풀려요' },
+  easy: { name: '쉬움', note: '노노그램이 처음이에요' },
+  normal: { name: '보통', note: '해 본 적 있어요' },
+  hard: { name: '어려움', note: '자신 있어요' },
 };
+export const LEVEL_KEYS = ['easy', 'normal', 'hard'];
 export const layoutOf = (n) => LAYOUTS.find((l) => l.n === n) || LAYOUTS[2];
 export const pictureOf = (id) => PICTURES.find((p) => p.id === id) || PICTURES[0];
 export { PICTURES };
 
-// 방 설정(meta)으로 조각 목록을 만든다. 모든 기기가 같은 결과를 얻는다
+// 방 설정(meta)으로 조각 목록을 만든다. 모든 기기가 같은 결과를 얻는다.
+// 조각마다 쉬움·보통·어려움 세 벌이 있고, p.sol / p.ch / p.fills 는 그 조각의 지금 난이도(built.levelOf)를 따른다.
+// 세 벌은 같은 영역 글자를 쓰므로 칠판에서는 같은 그림으로 보인다.
 export function buildPieces(meta) {
   const L = layoutOf(meta.pieces);
   const pic = pictureOf(meta.picture);
-  const rows = pic.levels[meta.level] || pic.levels.normal;
   const [ox, oy] = (pic.crop && pic.crop[meta.pieces]) || [L.ox, L.oy];
-  const out = [];
+  const built = { L, pic, pieces: [], w: L.c * 10, h: L.r * 10, levelOf: () => meta.level || 'normal' };
   for (let r = 0; r < L.r; r++) for (let c = 0; c < L.c; c++) {
-    const sol = [], ch = [];
-    for (let y = 0; y < 10; y++) {
-      sol.push([]); ch.push([]);
-      for (let x = 0; x < 10; x++) {
-        const k = rows[(r + oy) * 10 + y][(c + ox) * 10 + x];
-        sol[y].push(k === k.toUpperCase() ? 1 : 0);
-        ch[y].push(k);
+    const lv = {};
+    for (const key of Object.keys(pic.levels)) {
+      const rows = pic.levels[key], sol = [], ch = [];
+      for (let y = 0; y < 10; y++) {
+        sol.push([]); ch.push([]);
+        for (let x = 0; x < 10; x++) {
+          const k = rows[(r + oy) * 10 + y][(c + ox) * 10 + x];
+          sol[y].push(k === k.toUpperCase() ? 1 : 0);
+          ch[y].push(k);
+        }
       }
+      lv[key] = { sol, ch, fills: sol.flat().reduce((a, v) => a + v, 0) };
     }
-    const fills = sol.flat().reduce((a, v) => a + v, 0);
-    out.push({ id: out.length, r, c, label: ROWL[r] + (c + 1), sol, ch, fills });
+    const id = built.pieces.length;
+    const cur = () => lv[built.levelOf(id)] || lv.normal;
+    built.pieces.push({
+      id, r, c, label: ROWL[r] + (c + 1), levels: lv,
+      get sol() { return cur().sol; }, get ch() { return cur().ch; }, get fills() { return cur().fills; },
+    });
   }
-  return { L, pic, pieces: out, w: L.c * 10, h: L.r * 10 };
+  return built;
 }
 
 // 칸 상태 문자열: 100글자, '0' 빈칸, '1' 칠함, '2' ×표시

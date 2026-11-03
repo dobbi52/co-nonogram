@@ -2,10 +2,10 @@
 // 칠판 화면은 "진행 맡은 칠판"으로서 조각 배정, 자리 비운 학생 정리, 완성 판정을 맡는다.
 import * as net from './net.js';
 import { app, brand, modeNotice, toast, go, joinUrl } from './ui.js';
-import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorSlots, esc, shuffle, EMPTY, MAX_HELPERS, CHECKS_PER_PIECE, buildGrid, toGrid } from './game.js';
+import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorSlots, esc, shuffle, EMPTY, MAX_HELPERS, CHECKS_PER_PIECE, buildGrid, toGrid, fromGrid } from './game.js';
 
 const OFFLINE_RELEASE_MS = 45000; // 조각을 맡은 학생이 이만큼 접속이 끊기면 조각을 다른 학생에게 넘긴다
-const setup = { pieces: 25, level: 'normal', picture: PICTURES[0].id };
+const setup = { pieces: 25, picture: PICTURES[0].id };
 // 방 만들기에서 그림을 묶어 보여 줄 순서
 const PICTURE_GROUPS = [
   ['동물', ['roof-cat', 'owl-forest', 'panda', 'penguin', 'octopus', 'garden']],
@@ -45,7 +45,7 @@ export function openSetup() {
     <p>조각 수와 난이도를 고르면 방이 만들어져요. 전자칠판에 코드가 나오면 학생들이 들어와요.</p>
     <div class="field"><span>조각 수</span><div class="sizes" id="sizes" role="radiogroup" aria-label="조각 수"></div>
       <span class="dim" style="font-size:16px">학생이 조각보다 많으면 남는 학생은 처음부터 친구 돕기와 꾸미기를 해요. 조각이 남으면 먼저 끝낸 학생이 이어서 풀어요.</span></div>
-    <div class="field"><span>난이도</span><div class="seg" id="lv">${Object.entries(LEVELS).map(([k, v]) => `<button data-v="${k}" aria-pressed="${k === setup.level}">${v.name} <span class="dim">${v.note}</span></button>`).join('')}</div></div>
+    <div class="field"><span>난이도</span><span class="dim" style="font-size:16px">학생이 들어올 때 각자 쉬움·보통·어려움 중에 골라요. 조각마다 난이도가 달라도 칠판에서는 같은 그림이 돼요.</span></div>
     <div class="field"><span>그림</span><div class="pics" id="pics" role="radiogroup" aria-label="그림"></div>
       <span class="dim" style="font-size:16px">30조각보다 작게 고르면 그림의 가운데를 잘라서 써요.</span></div>
     <div class="row"><button class="btn" id="create">방 만들기</button><button class="btn ghost" id="back">처음으로</button><span class="err" id="err"></span></div>
@@ -68,7 +68,6 @@ export function openSetup() {
     setup.picture = b.dataset.id;
     pics.querySelectorAll('button').forEach((x) => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', on); });
   }));
-  document.querySelectorAll('#lv button').forEach((b) => (b.onclick = () => { setup.level = b.dataset.v; document.querySelectorAll('#lv button').forEach((x) => x.setAttribute('aria-pressed', x === b)); }));
   document.getElementById('back').onclick = () => { location.href = location.pathname; };
   document.getElementById('create').onclick = createRoom;
 }
@@ -83,7 +82,7 @@ async function createRoom() {
       if (!m || old) c = t;
     }
     if (!c) throw new Error('no code');
-    await net.set(`rooms/${c}`, { meta: { code: c, pieces: setup.pieces, level: setup.level, picture: setup.picture, status: 'lobby', createdAt: Date.now() } });
+    await net.set(`rooms/${c}`, { meta: { code: c, pieces: setup.pieces, picture: setup.picture, status: 'lobby', createdAt: Date.now() } });
     try { localStorage.setItem(hostKey(c), '1'); } catch (_) {}
     openBoard(c);
   } catch (e) {
@@ -102,6 +101,7 @@ export function openBoard(c) {
     if (!R || !R.meta) { app.innerHTML = `<div class="sheet"><h2>방을 찾을 수 없어요</h2><p>코드 ${esc(c)}로 만든 방이 없어요.</p><div class="row"><button class="btn" onclick="location.href=location.pathname">처음으로</button></div></div>`; return; }
     if (!built || built.key !== R.meta.pieces + R.meta.level + R.meta.picture) {
       built = buildPieces(R.meta); built.key = R.meta.pieces + R.meta.level + R.meta.picture; slots = decorSlots(built.w, built.h, c);
+      built.levelOf = (id) => pieceRec(id).level || R.meta.level || 'normal';
     }
     hostTick(); schedule();
   });
@@ -109,7 +109,9 @@ export function openBoard(c) {
   timer = setInterval(() => { if (R && R.meta) { hostTick(); const el = document.getElementById('clock'); if (el && R.meta.startedAt) el.textContent = clock(); } }, 3000);
 }
 function schedule() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; render(); }); }
-const clock = () => { const t = Math.max(0, Math.floor(((R.meta.endedAt || Date.now()) - R.meta.startedAt) / 1000)); return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); };
+const clock = () => {
+  const m = R.meta, end = m.endedAt || (m.paused ? m.pausedAt : Date.now());
+  const t = Math.max(0, Math.floor((end - m.startedAt - (m.pausedMs || 0)) / 1000)); return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); };
 const fullBtn = () => `<button class="chip" id="full">전체 화면</button>`;
 function bindTop() {
   const f = document.getElementById('full');
@@ -134,7 +136,7 @@ function renderLobby() {
   const L = built.L, url = joinUrl(code);
   if (view !== 'lobby') {
     view = 'lobby';
-    app.innerHTML = `<div class="top">${brand('WAITING ROOM')}<div class="chips"><div class="chip size">${L.n}조각 · ${LEVELS[R.meta.level].name}</div>${fullBtn()}</div></div>
+    app.innerHTML = `<div class="top">${brand('WAITING ROOM')}<div class="chips"><div class="chip size">${L.n}조각</div>${fullBtn()}</div></div>
     <div class="lobby">
       <div class="join">
         <span style="font-size:22px">코드</span>
@@ -189,6 +191,9 @@ function hostTick() {
   const free = shuffle(P.filter((p) => !taken.has(p.id)).map((p) => p.id));
   const give = (sid, id) => {
     patch[`pieces/p${id}/owner`] = sid;
+    // 아직 아무도 칠하지 않은 조각이면 맡은 학생의 난이도로 정한다 (칠한 칸이 남은 조각은 원래 난이도 그대로)
+    const lvNow = rec(id).level, painted = ((R.cells || {})['p' + id] || '').includes('1');
+    if (!lvNow || !painted) patch[`pieces/p${id}/level`] = (S[sid] && S[sid].level) || 'normal';
     patch[`students/${sid}/piece`] = id; patch[`students/${sid}/mode`] = 'solve';
     patch[`students/${sid}/want`] = null; patch[`students/${sid}/helpTarget`] = null;
   };
@@ -237,8 +242,9 @@ function renderPlay() {
   if (view !== 'play') {
     view = 'play';
     app.innerHTML = `<div class="top">${brand('PIXEL NONOGRAM')}<div class="chips">
-      <div class="chip code">CODE <b>${esc(code)}</b></div><div class="chip size">${L.n}조각 · ${LEVELS[R.meta.level].name}</div>
-      <div class="chip">접속 <span class="px" id="online" style="font-size:12px;color:var(--green)">0</span>명</div>${fullBtn()}</div></div>
+      <div class="chip code">CODE <b>${esc(code)}</b></div><div class="chip size">${L.n}조각</div>
+      <div class="chip">접속 <span class="px" id="online" style="font-size:12px;color:var(--green)">0</span>명</div><span class="chips" id="ctrl"></span>${fullBtn()}</div></div>
+    <div class="notice paused" id="pausedNote" hidden><b>잠깐 멈춤</b> · 학생들은 지금 칠할 수 없어요. <b>다시 하기</b>를 누르면 이어서 풀어요.</div>
     <div class="stage">
       <div class="board-col">
         <div class="board-cap"><span>칠한 칸이 바로 나타나요 · 조각을 누르면 학생을 도울 수 있어요</span><span>시작하고 <span class="px" id="clock" style="font-size:11px;color:var(--yellow)">00:00</span></span></div>
@@ -257,6 +263,8 @@ function renderPlay() {
     tl.addEventListener('click', (e) => { const t = e.target.closest('[data-id]'); if (t) openPanel(+t.dataset.id); });
     tl.addEventListener('keydown', (e) => { const t = e.target.closest('[data-id]'); if (t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openPanel(+t.dataset.id); } });
   }
+  renderCtrl();
+  document.getElementById('pausedNote').hidden = !R.meta.paused;
   const d = boardData();
   drawPicture(document.getElementById('board'), d);
   refreshPanel();
@@ -291,26 +299,70 @@ function renderPlay() {
   document.getElementById('logList').innerHTML = logs.map(([, l]) => `<li>${l.who ? `<b>${esc(l.who)}</b> ` : ''}${esc(l.what)}</li>`).join('');
 }
 
+// ───── 잠깐 멈추기 / 여기서 끝내기 ─────
+let confirmEnd = false, ctrlSig = '';
+function renderCtrl() {
+  const el = document.getElementById('ctrl'); if (!el) return;
+  const sig = [!!R.meta.paused, confirmEnd].join('|');
+  if (sig === ctrlSig && el.childElementCount) return;
+  ctrlSig = sig;
+  el.innerHTML = confirmEnd
+    ? `<span class="chip" style="border-color:var(--pink);color:var(--pink)">정말 끝낼까요?</span><button class="chip end" id="endYes">끝내기</button><button class="chip" id="endNo">취소</button>`
+    : `<button class="chip" id="pauseBtn">${R.meta.paused ? '▶ 다시 하기' : 'Ⅱ 잠깐 멈추기'}</button><button class="chip" id="endBtn">여기서 끝내기</button>`;
+  const b = (id, fn) => { const x = document.getElementById(id); if (x) x.onclick = fn; };
+  b('pauseBtn', () => {
+    const m = R.meta, now = Date.now();
+    if (m.paused) net.update({ [`rooms/${code}/meta/paused`]: null, [`rooms/${code}/meta/pausedAt`]: null, [`rooms/${code}/meta/pausedMs`]: (m.pausedMs || 0) + (now - (m.pausedAt || now)) });
+    else net.update({ [`rooms/${code}/meta/paused`]: true, [`rooms/${code}/meta/pausedAt`]: now });
+  });
+  b('endBtn', () => { confirmEnd = true; renderCtrl(); });
+  b('endNo', () => { confirmEnd = false; renderCtrl(); });
+  b('endYes', () => {
+    confirmEnd = false; closePanel();
+    const m = R.meta, now = Date.now(), patch = {
+      [`rooms/${code}/meta/status`]: 'done', [`rooms/${code}/meta/endedAt`]: now, [`rooms/${code}/meta/stopped`]: true,
+      [`rooms/${code}/meta/paused`]: null, [`rooms/${code}/meta/pausedAt`]: null,
+    };
+    if (m.paused) patch[`rooms/${code}/meta/pausedMs`] = (m.pausedMs || 0) + (now - (m.pausedAt || now));
+    net.update(patch);
+    net.push(`rooms/${code}/log`, { who: '', what: '선생님이 여기서 끝냈어요', at: now });
+  });
+}
+
 // ───── 완성 ─────
+let showAll = false;
+const unfinished = () => built.pieces.filter((p) => !pieceRec(p.id).done);
+// 끝까지 못 푼 조각: 전체 그림을 보여 줄 때 흐리게 덮어 구분한다
+function dimUnfinished(cv, scale) {
+  const x = cv.getContext('2d'); x.fillStyle = 'rgba(11,15,26,.55)';
+  for (const p of unfinished()) x.fillRect((5 + p.c * 10) * scale, (5 + p.r * 10) * scale, 10 * scale, 10 * scale);
+}
+function drawResult(cv, scale) {
+  const d = boardData(), part = unfinished().length > 0;
+  drawPicture(cv, { ...d, all: !part || showAll, scale });
+  if (part && showAll) dimUnfinished(cv, scale);
+}
 function renderResult() {
-  document.title = '완성! · 협동 노노그램';
+  const N = built.pieces.length, left = unfinished().length, done = N - left;
+  document.title = (left ? '오늘은 여기까지' : '완성!') + ' · 협동 노노그램';
   if (view !== 'done') {
-    view = 'done'; showNames = false;
+    view = 'done'; showNames = false; showAll = false;
     app.innerHTML = `<div class="result">
-      <div class="top">${brand('COMPLETE')}<div class="chips"><div class="chip">걸린 시간 <span class="px" style="font-size:12px;color:var(--yellow)">${R.meta.startedAt ? clock() : '-'}</span></div>${fullBtn()}</div></div>
-      <h2>우리 반 협동화 완성!</h2>
+      <div class="top">${brand(left ? 'GOOD JOB' : 'COMPLETE')}<div class="chips"><div class="chip">걸린 시간 <span class="px" style="font-size:12px;color:var(--yellow)">${R.meta.startedAt ? clock() : '-'}</span></div>${fullBtn()}</div></div>
+      <h2>${left ? `오늘은 여기까지! <span class="px" style="font-size:22px;color:var(--yellow)">${done} / ${N}</span> 조각 완성` : '우리 반 협동화 완성!'}</h2>
       <div class="board-box"><canvas id="resCanvas"></canvas><div class="tiles" id="resTiles"></div></div>
-      <div class="row"><button class="btn ghost small" id="names" aria-pressed="false">칠한 사람 보기</button><button class="btn small yellow" id="save">이미지 내려받기</button><button class="btn small" id="newRoom">새 방 만들기</button></div>
+      <div class="row">${left ? '<button class="btn small blue" id="all" aria-pressed="false">전체 그림 보기</button>' : ''}<button class="btn ghost small" id="names" aria-pressed="false">칠한 사람 보기</button><button class="btn small yellow" id="save">이미지 내려받기</button><button class="btn small" id="newRoom">새 방 만들기</button></div>
       <h2 style="font-size:24px;color:var(--fg)">함께한 친구들</h2>
       <div class="credits" id="credits"></div>
     </div>`;
     bindTop();
     document.getElementById('names').onclick = (e) => { showNames = !showNames; e.currentTarget.setAttribute('aria-pressed', showNames); e.currentTarget.textContent = showNames ? '그림만 보기' : '칠한 사람 보기'; paintNames(); };
     document.getElementById('save').onclick = saveImage;
+    const al = document.getElementById('all');
+    if (al) al.onclick = (e) => { showAll = !showAll; e.currentTarget.setAttribute('aria-pressed', showAll); e.currentTarget.textContent = showAll ? '우리가 칠한 만큼 보기' : '전체 그림 보기'; drawResult(document.getElementById('resCanvas'), 8); };
     document.getElementById('newRoom').onclick = () => { location.href = location.pathname; };
   }
-  const d = boardData();
-  drawPicture(document.getElementById('resCanvas'), { ...d, all: true });
+  drawResult(document.getElementById('resCanvas'), 8);
   paintNames();
   document.getElementById('credits').innerHTML = sorted(R.students).map(([, s]) => {
     const bits = []; if (s.helps) bits.push(`도움 ${s.helps}번`); if (s.decor) bits.push(`장식 ${s.decor}개`);
@@ -324,7 +376,7 @@ function paintNames() {
 }
 function saveImage() {
   const sc = 14, cv = document.createElement('canvas');
-  const d = boardData(); drawPicture(cv, { ...d, all: true, scale: sc });
+  drawResult(cv, sc);
   const out = document.createElement('canvas'); out.width = cv.width; out.height = cv.height + 70;
   const x = out.getContext('2d'); x.fillStyle = '#0B0F1A'; x.fillRect(0, 0, out.width, out.height); x.drawImage(cv, 0, 0);
   if (showNames) {
@@ -336,7 +388,7 @@ function saveImage() {
     }
   }
   const dt = new Date();
-  x.fillStyle = '#39FF88'; x.font = '34px "Do Hyeon", sans-serif'; x.textBaseline = 'middle'; x.fillText('우리 반 협동화', 20, cv.height + 36);
+  x.fillStyle = '#39FF88'; x.font = '34px "Do Hyeon", sans-serif'; x.textBaseline = 'middle'; x.fillText(unfinished().length ? `우리 반 협동화 (${built.pieces.length - unfinished().length}/${built.pieces.length})` : '우리 반 협동화', 20, cv.height + 36);
   x.fillStyle = '#8A93C2'; x.font = '20px "Do Hyeon", sans-serif'; x.textAlign = 'right';
   x.fillText(`${Object.keys(R.students || {}).length}명 · ${built.pieces.length}조각 · ${dt.getFullYear()}.${dt.getMonth() + 1}.${dt.getDate()}`, out.width - 20, cv.height + 36);
   out.toBlob((b) => {
@@ -349,8 +401,9 @@ function saveImage() {
 
 // ───── 선생님이 학생 직접 돕기: 조각을 누르면 열림 ─────
 let panelId = null, panelGrid = null, panelWrong = false, panelCool = 0, panelSig = '';
+let tGrid = null, tPending = false, tTimer = 0, tTool = 1; // 선생님이 직접 칠할 때 쓰는 판
 function openPanel(id) {
-  panelId = id; panelWrong = false; panelSig = '';
+  panelId = id; panelWrong = false; panelSig = ''; tGrid = null; tPending = false;
   let el = document.getElementById('panel');
   if (!el) {
     el = document.createElement('div'); el.id = 'panel'; el.className = 'overlay';
@@ -360,33 +413,44 @@ function openPanel(id) {
   el.hidden = false;
   refreshPanel(true);
 }
-function closePanel() { panelId = null; panelGrid = null; const el = document.getElementById('panel'); if (el) el.hidden = true; }
+function closePanel() { flushTeacher(); panelId = null; panelGrid = null; tGrid = null; const el = document.getElementById('panel'); if (el) el.hidden = true; }
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && panelId != null) closePanel(); });
 function wrongSet(p) {
   const st = cellsOf(p.id), w = new Set();
   for (let i = 0; i < 100; i++) if (st[i] === '1' && !p.sol[i / 10 | 0][i % 10]) w.add(i);
   return w;
 }
+function flushTeacher() {
+  clearTimeout(tTimer);
+  if (!tPending || panelId == null || !tGrid) return;
+  tPending = false;
+  const id = panelId;
+  net.update({ [`rooms/${code}/cells/p${id}`]: fromGrid(tGrid), [`rooms/${code}/pieces/p${id}/teacherAt`]: Date.now() });
+}
 function refreshPanel(force) {
   if (panelId == null || !R || !built) return;
+  // 학생이 칠한 최신 상태를 받아 온다 (선생님이 칠하는 중에는 기다림)
+  if (!tPending && !(panelGrid && panelGrid.isDragging())) tGrid = toGrid(cellsOf(panelId));
   const el = document.getElementById('panel'); if (!el) return;
   const p = built.pieces[panelId], rec = pieceRec(p.id), S = R.students || {};
   const o = rec.owner && S[rec.owner];
   const hs = Object.values(rec.helpers || {});
   const left = CHECKS_PER_PIECE + (rec.bonus || 0) - (rec.checks || 0);
   const w = wrongSet(p);
-  const sig = [rec.done, rec.owner, hs.join(), left, panelWrong, panelCool > Date.now(), w.size, Math.round(progressOf(p) * 20), !!rec.request, o && o.online].join('|');
-  if (!force && sig === panelSig && panelGrid) { panelGrid.refresh(); return; }
+  const sig = [rec.done, rec.owner, hs.join(), left, panelWrong, panelCool > Date.now(), w.size, !!rec.request, o && o.online, tTool].join('|');
+  if (panelGrid && panelGrid.isDragging()) return;
+  if (!force && sig === panelSig && panelGrid) { panelGrid.refresh(); const pg = document.getElementById('pPct'); if (pg) pg.textContent = Math.round(progressOf(p) * 100); return; }
   panelSig = sig;
   if (rec.done || !o) {
     el.innerHTML = `<div class="sheet"><h2>${p.label} 조각</h2><p>${rec.done ? '이 조각은 완성됐어요.' : '지금은 맡은 학생이 없어요.'}</p><div class="row"><button class="btn" id="pClose">닫기</button></div></div>`;
     panelGrid = null; document.getElementById('pClose').onclick = closePanel; return;
   }
   el.innerHTML = `<div class="sheet">
-    <div class="row" style="justify-content:space-between"><h2>${esc(o.name)}의 <span class="px" style="font-size:20px">${p.label}</span></h2><button class="btn ghost small" id="pClose">닫기</button></div>
-    <p>${Math.round(progressOf(p) * 100)}% 칠함 · 검사하기 ${left > 0 ? left + '번 남음' : '다 씀'}${hs.length ? ' · 돕는 친구 ' + hs.map(esc).join(', ') : ''}${rec.request ? ' · <span style="color:var(--pink)">도와줘!</span>' : ''}${o.online === false ? ' · 접속 끊김' : ''}</p>
+    <div class="row" style="justify-content:space-between"><h2>${esc(o.name)}의 <span class="px" style="font-size:20px">${p.label}</span> <span class="dim" style="font-size:18px">${(LEVELS[built.levelOf(p.id)] || {}).name || ''}</span></h2><button class="btn ghost small" id="pClose">닫기</button></div>
+    <p><span id="pPct">${Math.round(progressOf(p) * 100)}</span>% 칠함 · 검사하기 ${left > 0 ? left + '번 남음' : '다 씀'}${hs.length ? ' · 돕는 친구 ' + hs.map(esc).join(', ') : ''}${rec.request ? ' · <span style="color:var(--pink)">도와줘!</span>' : ''}${o.online === false ? ' · 접속 끊김' : ''}</p>
     <div class="grid-host" id="pGrid"></div>
-    <div class="msg ${panelCool > Date.now() ? '' : 'hi'}">${panelCool > Date.now() ? '학생 화면에 그 줄이 반짝였어요' : '숫자를 누르면 학생 화면에 그 줄이 반짝여요'}</div>
+    <div class="msg ${panelCool > Date.now() ? '' : 'hi'}">${panelCool > Date.now() ? '학생 화면에 그 줄이 반짝였어요' : '칸을 누르면 학생 판에 직접 칠해져요 · 숫자를 누르면 그 줄이 반짝여요'}</div>
+    <div class="tools"><button class="tool" id="ptFill" aria-pressed="${tTool === 1}">칠하기</button><button class="tool" id="ptX" aria-pressed="${tTool === 2}">× 표시</button></div>
     <div class="row">
       <button class="btn ghost small" id="pWrong" aria-pressed="${panelWrong}">${panelWrong ? '틀린 칸 숨기기' : `틀린 칸 보기 (${w.size})`}</button>
       <button class="btn small pink" id="pReveal" ${w.size ? '' : 'disabled'}>학생에게 틀린 칸 보여 주기</button>
@@ -395,8 +459,10 @@ function refreshPanel(force) {
     <span class="dim" style="font-size:15px">틀린 칸 보기는 이 화면에만 보여요. 칠판이 반 전체에 보인다면 선생님 폰에서 여세요.</span>
   </div>`;
   panelGrid = buildGrid(document.getElementById('pGrid'), {
-    sol: p.sol, editable: false, cls: 'watch',
-    get: (r, c) => +(cellsOf(p.id)[r * 10 + c] || 0),
+    sol: p.sol, editable: true, cls: 'watch teach', tool: () => tTool,
+    get: (r, c) => tGrid[r][c],
+    set: (r, c, v) => { tGrid[r][c] = v; tPending = true; clearTimeout(tTimer); tTimer = setTimeout(flushTeacher, 150); },
+    onStrokeEnd: () => { flushTeacher(); },
     wrong: () => (panelWrong ? wrongSet(p) : null),
     hl: () => { const h = (R.hl || {})['p' + p.id]; return h && Date.now() - h.at < 5000 ? h : null; },
     onHint: (type, i) => {
@@ -407,6 +473,8 @@ function refreshPanel(force) {
     },
   });
   document.getElementById('pClose').onclick = closePanel;
+  document.getElementById('ptFill').onclick = () => { tTool = 1; refreshPanel(true); };
+  document.getElementById('ptX').onclick = () => { tTool = 2; refreshPanel(true); };
   document.getElementById('pWrong').onclick = () => { panelWrong = !panelWrong; refreshPanel(true); };
   document.getElementById('pReveal').onclick = () => { net.set(`rooms/${code}/pieces/p${p.id}/reveal`, Date.now()); toast(`${o.name} 화면에 틀린 칸을 보여 줬어요`); };
   document.getElementById('pBonus').onclick = () => { net.set(`rooms/${code}/pieces/p${p.id}/bonus`, (rec.bonus || 0) + 1); toast(`${o.name}에게 검사하기를 1번 더 줬어요`); };
