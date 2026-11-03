@@ -2,7 +2,7 @@
 
 사용법: python3 make_pictures.py
 - 지붕 위 고양이는 roof-cat.json(이미 맞춘 결과)을 그대로 쓴다.
-- 나머지는 scenes.py의 장면을 그린 뒤 roof_cat.py의 tune으로 보통·어려움 두 벌을 만든다.
+- 나머지는 scenes.py, scenes2.py의 장면을 그린 뒤 roof_cat.py의 tune으로 보통·어려움 두 벌을 만든다.
 - 미리보기: 미리보기/<id>.png
 """
 import json, os, sys
@@ -10,6 +10,7 @@ from multiprocessing import Pool
 from PIL import Image
 import roof_cat as rc
 import scenes
+import scenes2
 
 P = 10
 
@@ -54,7 +55,7 @@ def main():
     d = json.load(open('roof-cat.json'))
     out.append({'id': 'roof-cat', 'name': '지붕 위 고양이', 'w': 60, 'h': 50, 'pal': d['pal'], 'levels': d['levels']})
     save_png(d['levels']['normal'], d['pal'], '미리보기/roof-cat.png')
-    for i, (sid, name, fn, crop) in enumerate(scenes.SCENES):
+    for i, (sid, name, fn, crop) in enumerate(scenes.SCENES + scenes2.SCENES2):
         print(name, file=sys.stderr)
         kind, fill, pal = fn()
         lv = tune_scene(kind, fill, i + 1)

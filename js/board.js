@@ -6,6 +6,15 @@ import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorS
 
 const OFFLINE_RELEASE_MS = 45000; // 조각을 맡은 학생이 이만큼 접속이 끊기면 조각을 다른 학생에게 넘긴다
 const setup = { pieces: 25, level: 'normal', picture: PICTURES[0].id };
+// 방 만들기에서 그림을 묶어 보여 줄 순서
+const PICTURE_GROUPS = [
+  ['동물', ['roof-cat', 'owl-forest', 'panda', 'penguin', 'octopus', 'garden']],
+  ['계절과 명절', ['cherry', 'autumn', 'chuseok', 'winter']],
+  ['우리나라', ['palace', 'turtle-ship', 'fireworks']],
+  ['모험과 상상', ['castle', 'pirate', 'unicorn', 'dino']],
+  ['우주', ['rocket', 'solar']],
+  ['말랑 친구들과 즐거운 곳', ['friends', 'dessert']],
+];
 let code = null, R = null, built = null, slots = [], isHost = false, unsub = null, view = '', timer = 0, raf = 0;
 let showNames = false, lastPatch = '', lastPatchAt = 0, lastDoneId = null, lastDoneAt = 0, doneSeen = null;
 const hostKey = (c) => 'cono-host-' + c;
@@ -48,7 +57,13 @@ export function openSetup() {
   };
   drawSizes();
   const pics = document.getElementById('pics');
-  pics.innerHTML = PICTURES.map((p) => `<button class="pick-pic${p.id === setup.picture ? ' on' : ''}" role="radio" aria-checked="${p.id === setup.picture}" data-id="${esc(p.id)}"><img src="${thumb(p)}" alt=""><span>${esc(p.name)}</span></button>`).join('');
+  const btn = (p) => `<button class="pick-pic${p.id === setup.picture ? ' on' : ''}" role="radio" aria-checked="${p.id === setup.picture}" data-id="${esc(p.id)}"><img src="${thumb(p)}" alt=""><span>${esc(p.name)}</span></button>`;
+  const used = new Set();
+  pics.innerHTML = PICTURE_GROUPS.map(([g, ids]) => {
+    const list = ids.map((id) => PICTURES.find((p) => p.id === id)).filter(Boolean);
+    list.forEach((p) => used.add(p.id));
+    return list.length ? `<h3 class="pic-group">${g}</h3>${list.map(btn).join('')}` : '';
+  }).join('') + (PICTURES.some((p) => !used.has(p.id)) ? `<h3 class="pic-group">그 밖의 그림</h3>${PICTURES.filter((p) => !used.has(p.id)).map(btn).join('')}` : '');
   pics.querySelectorAll('button').forEach((b) => (b.onclick = () => {
     setup.picture = b.dataset.id;
     pics.querySelectorAll('button').forEach((x) => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', on); });
