@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>전자칠판 완성</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Press+Start+2P&display=swap">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1280px; height: 720px; box-sizing: border-box; padding: 18px 28px; background: #0B0F1A; color: #E8ECFF; font-family: 'Do Hyeon', sans-serif; display: flex; gap: 32px; align-items: center; overflow: hidden">
+
+  <div style="flex: none; border: 4px solid #FFE14D; background: #141A2E; padding: 12px">
+    <img src="/_blob/592cbf96242b084c6a0b2b48b57e607b" alt="완성된 고양이 픽셀 그림" style="display: block; width: 660px; height: 550px; image-rendering: pixelated">
+  </div>
+
+  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 18px">
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <div style="font-family: 'Press Start 2P', monospace; font-size: 32px; line-height: 1.2; color: #39FF88">CLEAR!</div>
+      <div style="font-size: 46px; line-height: 1.05">우리 반이 완성했어요</div>
+      <div style="font-size: 26px; color: #8A93C2">정답은 <span style="color: #FFE14D">고양이</span></div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+      <div style="padding: 12px; border: 3px solid #3A4466; display: flex; flex-direction: column; gap: 10px">
+        <div style="font-size: 18px; color: #8A93C2">걸린 시간</div>
+        <div style="font-family: 'Press Start 2P', monospace; font-size: 20px; color: #FFE14D">12:48</div>
+      </div>
+      <div style="padding: 12px; border: 3px solid #3A4466; display: flex; flex-direction: column; gap: 10px">
+        <div style="font-size: 18px; color: #8A93C2">함께한 친구</div>
+        <div style="font-family: 'Press Start 2P', monospace; font-size: 20px; color: #39FF88">24</div>
+      </div>
+      <div style="padding: 12px; border: 3px solid #3A4466; display: flex; flex-direction: column; gap: 10px">
+        <div style="font-size: 18px; color: #8A93C2">그림 맞힌 친구</div>
+        <div style="font-family: 'Press Start 2P', monospace; font-size: 20px; color: #FF4FA3">18</div>
+      </div>
+    </div>
+
+    <div style="background: #141A2E; border: 4px solid #3A4466; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+      <div style="font-size: 22px; color: #4FC3FF">오늘의 칭호</div>
+      <div style="display: flex; align-items: center; justify-content: space-between; min-height: 36px; font-size: 22px"><span>그림을 제일 먼저 맞힌 친구</span><span style="color: #FF4FA3">민지</span></div>
+      <div style="display: flex; align-items: center; justify-content: space-between; min-height: 36px; font-size: 22px"><span>조각을 가장 많이 푼 친구</span><span style="color: #39FF88">준호</span></div>
+      <div style="display: flex; align-items: center; justify-content: space-between; min-height: 36px; font-size: 22px"><span>마지막 조각을 맞춘 친구</span><span style="color: #FFE14D">서연</span></div>
+    </div>
+
+    <div style="display: flex; gap: 14px">
+      <button style="height: 56px; padding: 0 24px; border: none; background: #39FF88; color: #0B0F1A; box-shadow: 5px 5px 0 #1F6B45; font-family: 'Do Hyeon', sans-serif; font-size: 22px; cursor: pointer">다음 그림 풀기</button>
+      <button style="height: 56px; padding: 0 20px; background: transparent; border: 3px solid #3A4466; color: #E8ECFF; font-family: 'Do Hyeon', sans-serif; font-size: 20px; cursor: pointer">그만하기</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

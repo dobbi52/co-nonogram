@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>학생 폰 내 조각 풀기</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Press+Start+2P&display=swap">
+<style>
+body{margin:0}
+a{color:#0B0F1A}a:hover{color:#0B0F1A}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; padding: 16px 12px; background: #0B0F1A; color: #E8ECFF; font-family: 'Do Hyeon', sans-serif; display: flex; flex-direction: column; gap: 12px; overflow: hidden">
+
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="align-self: flex-start; padding: 8px 10px; background: #39FF88; color: #0B0F1A; font-size: 20px; line-height: 24px">내 조각 <span style="font-family: 'Press Start 2P', monospace; font-size: 14px">{{label}}</span></div>
+      <div style="font-size: 18px; color: #8A93C2">우리 반 <span style="font-family: 'Press Start 2P', monospace; font-size: 13px; color: #39FF88">{{doneCount}}</span> / 30 조각 완성</div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(6, 14px); grid-auto-rows: 14px; gap: 2px; flex: none" role="img" aria-label="큰 그림에서 내 조각의 자리">
+      <sc-for list="{{map}}" as="m" hint-placeholder-count="30">
+        <i style="display: block; background: {{m.bg}}"></i>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="background: #141A2E; border: 4px solid #39FF88; padding-bottom: 4px">
+    <div style="display: flex; height: 66px">
+      <div style="width: 74px; flex: none"></div>
+      <sc-for list="{{colHints}}" as="col" hint-placeholder-count="10">
+        <div style="width: 28px; height: 66px; box-sizing: border-box; padding-bottom: 4px; display: flex; align-items: flex-end; justify-content: center; text-align: center; white-space: pre-line; font-family: 'Press Start 2P', monospace; font-size: 9px; line-height: 15px; color: {{col.color}}">{{col.text}}</div>
+      </sc-for>
+    </div>
+    <sc-for list="{{rows}}" as="row" hint-placeholder-count="10">
+      <div style="display: flex; height: 28px">
+        <div style="width: 74px; flex: none; box-sizing: border-box; padding-right: 6px; text-align: right; font-family: 'Press Start 2P', monospace; font-size: 9px; line-height: 28px; white-space: nowrap; color: {{row.color}}">{{row.text}}</div>
+        <sc-for list="{{row.cells}}" as="cell" hint-placeholder-count="10">
+          <button aria-label="{{cell.aria}}" onClick="{{cell.tap}}" style="width: 28px; height: 28px; padding: 0; flex: none; box-sizing: border-box; background: {{cell.bg}}; border-top: 0; border-left: 0; border-right: {{cell.br}}; border-bottom: {{cell.bb}}; color: {{cell.fg}}; font-family: 'Press Start 2P', monospace; font-size: 11px; cursor: pointer">{{cell.mark}}</button>
+        </sc-for>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="min-height: 24px; font-size: 19px; color: {{msgColor}}">{{msg}}</div>
+
+  <sc-if value="{{playing}}" hint-placeholder-val="{{ true }}">
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+      <button onClick="{{useFill}}" style="height: 54px; border: 3px solid {{fillLine}}; background: {{fillBg}}; color: {{fillFg}}; font-family: 'Do Hyeon', sans-serif; font-size: 21px; cursor: pointer">칠하기</button>
+      <button onClick="{{useMark}}" style="height: 54px; border: 3px solid {{markLine}}; background: {{markBg}}; color: {{markFg}}; font-family: 'Do Hyeon', sans-serif; font-size: 21px; cursor: pointer">× 표시</button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{finished}}" hint-placeholder-val="{{ false }}">
+    <button onClick="{{nextPiece}}" style="height: 54px; margin-right: 5px; border: none; background: #39FF88; color: #0B0F1A; box-shadow: 5px 5px 0 #1F6B45; font-family: 'Do Hyeon', sans-serif; font-size: 21px; cursor: pointer">남은 조각 하나 더 풀기</button>
+  </sc-if>
+
+  <a href="Guess.dc.html" style="height: 54px; display: flex; align-items: center; justify-content: center; background: #FF4FA3; color: #0B0F1A; box-shadow: 5px 5px 0 #7A1F4F; font-size: 21px; text-decoration: none; margin-right: 5px">무슨 그림일까? 맞히기</a>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+const PAL = {
+  s: '#18214A', S: '#31427E', o: '#C4661C', O: '#FF9A3C', l: '#F2C79A', L: '#FFE3C2',
+  e: '#0B0F1A', E: '#0B0F1A', n: '#FF4FA3', N: '#FF4FA3'
+};
+const PIECES = [
+  {
+    label: 'B2', r: 1, c: 1,
+    rows: ['sssoONNNNN', 'sssoONNNOo', 'sssoONOOOo', 'sssOOOOOOO', 'sssOOOOOOO', 'sssOOOOOOe', 'sssoooooee', 'sssOOOOOee', 'ssOOOOOoee', 'sssOOOOOOe']
+  },
+  {
+    label: 'C3', r: 2, c: 2,
+    rows: ['OOLlnnnLLO', 'OLLLLnLLLL', 'LlLLLnLLLl', 'LLLLLLLLLL', 'LLLeeLeeLL', 'OLLLLLLLLL', 'OOLLLLLLLo', 'OOoOOOOOOO', 'OOOOOOOoOO', 'oooOOOOOoo']
+  }
+];
+const SOLVED = ['110111', '100110', '010101', '101110', '110101'];
+const NOTE = '가로·세로 숫자를 보고 칠해요';
+
+const isOn = (ch) => ch >= 'A' && ch <= 'Z';
+
+function runs(flags) {
+  const out = [];
+  let n = 0;
+  flags.forEach((on) => {
+    if (on) { n += 1; } else if (n) { out.push(n); n = 0; }
+  });
+  if (n) out.push(n);
+  return out.length ? out : [0];
+}
+
+function startMarks(piece) {
+  const marks = {};
+  piece.rows.forEach((line, r) => {
+    line.split('').forEach((ch, c) => {
+      if (isOn(ch) && (r * 3 + c * 7) % 5 < 3) marks[r + ',' + c] = 'fill';
+    });
+  });
+  return marks;
+}
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { index: 0, tool: 'fill', marks: startMarks(PIECES[0]), msg: NOTE, msgColor: '#8A93C2', extraDone: 0 };
+  }
+
+  tap(r, c) {
+    const piece = PIECES[this.state.index];
+    const key = r + ',' + c;
+    const marks = { ...this.state.marks };
+    const current = marks[key];
+    if (current === 'fill' || current === 'wrong' || this.isFinished(marks)) return;
+    if (this.state.tool === 'mark') {
+      if (current === 'mark') { delete marks[key]; } else { marks[key] = 'mark'; }
+      this.setState({ marks });
+      return;
+    }
+    if (isOn(piece.rows[r][c])) {
+      marks[key] = 'fill';
+      if (this.isFinished(marks)) {
+        this.setState({ marks, msg: '조각 완성! 큰 그림에 들어갔어요', msgColor: '#39FF88', extraDone: this.state.extraDone + 1 });
+      } else {
+        this.setState({ marks, msg: NOTE, msgColor: '#8A93C2' });
+      }
+    } else {
+      marks[key] = 'wrong';
+      this.setState({ marks, msg: '이 칸은 아니에요', msgColor: '#FF4FA3' });
+    }
+  }
+
+  isFinished(marks) {
+    const piece = PIECES[this.state.index];
+    return piece.rows.every((line, r) => line.split('').every((ch, c) => !isOn(ch) || marks[r + ',' + c] === 'fill'));
+  }
+
+  renderVals() {
+    const { index, tool, marks, msg, msgColor, extraDone } = this.state;
+    const piece = PIECES[index];
+    const finished = this.isFinished(marks);
+    const flags = piece.rows.map((line) => line.split('').map(isOn));
+
+    const rows = piece.rows.map((line, r) => {
+      const done = line.split('').every((ch, c) => !isOn(ch) || marks[r + ',' + c] === 'fill');
+      return {
+        text: runs(flags[r]).join(' '),
+        color: done ? '#8A93C2' : '#E8ECFF',
+        cells: line.split('').map((ch, c) => {
+          const m = marks[r + ',' + c];
+          let bg = m === 'fill' ? '#39FF88' : m === 'wrong' ? '#FF4FA3' : '#1C2340';
+          if (finished) bg = PAL[ch];
+          return {
+            bg,
+            fg: m === 'wrong' ? '#0B0F1A' : '#8A93C2',
+            mark: !finished && (m === 'wrong' || m === 'mark') ? '×' : '',
+            br: c === 4 ? '2px solid #8A93C2' : '1px solid #3A4466',
+            bb: r === 4 ? '2px solid #8A93C2' : '1px solid #3A4466',
+            aria: (r + 1) + '행 ' + (c + 1) + '열',
+            tap: () => this.tap(r, c)
+          };
+        })
+      };
+    });
+
+    const colHints = Array.from({ length: 10 }, (_, c) => {
+      const col = flags.map((row) => row[c]);
+      const done = col.every((on, r) => !on || marks[r + ',' + c] === 'fill');
+      return { text: runs(col).join('\n'), color: done ? '#8A93C2' : '#E8ECFF' };
+    });
+
+    const map = [];
+    SOLVED.forEach((line, r) => {
+      line.split('').forEach((flag, c) => {
+        const mine = r === piece.r && c === piece.c;
+        map.push({ bg: mine ? '#FFE14D' : flag === '1' ? '#39FF88' : '#1C2340' });
+      });
+    });
+
+    const fillOn = tool === 'fill';
+    return {
+      label: piece.label,
+      doneCount: 19 + extraDone,
+      rows,
+      colHints,
+      map,
+      msg,
+      msgColor,
+      finished,
+      playing: !finished,
+      fillBg: fillOn ? '#39FF88' : 'transparent',
+      fillFg: fillOn ? '#0B0F1A' : '#E8ECFF',
+      fillLine: fillOn ? '#39FF88' : '#3A4466',
+      markBg: fillOn ? 'transparent' : '#FFE14D',
+      markFg: fillOn ? '#E8ECFF' : '#0B0F1A',
+      markLine: fillOn ? '#3A4466' : '#FFE14D',
+      useFill: () => this.setState({ tool: 'fill' }),
+      useMark: () => this.setState({ tool: 'mark' }),
+      nextPiece: () => {
+        const next = (index + 1) % PIECES.length;
+        this.setState({ index: next, marks: startMarks(PIECES[next]), tool: 'fill', msg: NOTE, msgColor: '#8A93C2' });
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

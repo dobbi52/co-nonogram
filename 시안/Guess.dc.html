@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>학생 폰 그림 맞히기</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Press+Start+2P&display=swap">
+<style>
+body{margin:0}
+a{color:#E8ECFF}a:hover{color:#FFE14D}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; padding: 16px 12px; background: #0B0F1A; color: #E8ECFF; font-family: 'Do Hyeon', sans-serif; display: flex; flex-direction: column; gap: 12px; overflow: hidden">
+
+  <div style="display: flex; align-items: center; justify-content: space-between; height: 44px">
+    <a href="Student.dc.html" style="height: 44px; box-sizing: border-box; padding: 0 12px; display: flex; align-items: center; border: 3px solid #3A4466; font-size: 18px; text-decoration: none">내 조각으로</a>
+    <div style="font-size: 18px; color: #8A93C2"><span style="font-family: 'Press Start 2P', monospace; font-size: 13px; color: #39FF88">19</span> / 30 조각 완성</div>
+  </div>
+
+  <div style="position: relative; width: 360px; height: 300px; align-self: center; border: 3px solid #FF4FA3; background: #141A2E">
+    <img src="/_blob/592cbf96242b084c6a0b2b48b57e607b" alt="지금까지 나타난 큰 그림" style="display: block; width: 360px; height: 300px; image-rendering: pixelated">
+    <div style="position: absolute; left: 0; top: 0; width: 360px; height: 300px; display: grid; grid-template-columns: repeat(6, 60px); grid-auto-rows: 60px" aria-hidden="true">
+      <sc-for list="{{tiles}}" as="t" hint-placeholder-count="30">
+        <i style="display: block; box-sizing: border-box; background: {{t.bg}}; border: {{t.line}}"></i>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display: flex; align-items: center; justify-content: space-between">
+    <div style="font-size: 26px; color: #FF4FA3">무슨 그림일까?</div>
+    <div style="font-size: 18px; color: #8A93C2">기회 <span style="font-family: 'Press Start 2P', monospace; font-size: 14px; color: #FFE14D">{{tries}}</span>번</div>
+  </div>
+
+  <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 34px">
+    <span style="font-size: 19px; color: #FFE14D">땡!</span>
+    <sc-for list="{{wrongs}}" as="w" hint-placeholder-count="3">
+      <span style="padding: 2px 8px; border: 2px solid #3A4466; font-size: 17px">{{w.text}}</span>
+    </sc-for>
+  </div>
+
+  <sc-if value="{{showForm}}" hint-placeholder-val="{{ true }}">
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <label for="answer" style="font-size: 17px; color: #39FF88">정답 입력</label>
+      <input id="answer" value="{{guess}}" onChange="{{onGuess}}" placeholder="그림의 이름을 적어요" style="height: 56px; box-sizing: border-box; width: 100%; padding: 0 14px; border: 3px solid #39FF88; border-radius: 0; background: #141A2E; color: #E8ECFF; font-family: 'Do Hyeon', sans-serif; font-size: 22px; outline: none">
+      <button onClick="{{submit}}" style="height: 54px; margin-right: 5px; border: none; background: #FF4FA3; color: #0B0F1A; box-shadow: 5px 5px 0 #7A1F4F; font-family: 'Do Hyeon', sans-serif; font-size: 21px; cursor: pointer">이 답으로 낼래요</button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isCorrect}}" hint-placeholder-val="{{ false }}">
+    <div style="padding: 14px 16px; background: #39FF88; color: #0B0F1A; display: flex; flex-direction: column; gap: 6px">
+      <div style="font-family: 'Press Start 2P', monospace; font-size: 18px; line-height: 1.3">BONUS!</div>
+      <div style="font-size: 22px">정답이에요. 친구들에게는 비밀!</div>
+      <div style="font-size: 18px">내 조각도 끝까지 풀어요</div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isOut}}" hint-placeholder-val="{{ false }}">
+    <div style="padding: 14px 16px; border: 3px dashed #3A4466; font-size: 20px; line-height: 1.35">기회를 다 썼어요. 내 조각을 풀면서 그림이 나타나는 걸 지켜봐요</div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+const SOLVED = ['110111', '100110', '010101', '101110', '110101'];
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { guess: '', tries: 3, wrongs: ['강아지', '호랑이', '여우'], correct: false };
+  }
+
+  submit() {
+    const answer = this.state.guess.trim();
+    if (!answer) return;
+    if (answer === '고양이') {
+      this.setState({ correct: true, guess: '' });
+      return;
+    }
+    this.setState({ tries: this.state.tries - 1, wrongs: this.state.wrongs.concat(answer), guess: '' });
+  }
+
+  renderVals() {
+    const { guess, tries, wrongs, correct } = this.state;
+    const tiles = [];
+    SOLVED.forEach((line) => {
+      line.split('').forEach((flag) => {
+        tiles.push(flag === '1'
+          ? { bg: 'transparent', line: '0' }
+          : { bg: '#141A2E', line: '1px solid #3A4466' });
+      });
+    });
+    return {
+      tiles,
+      guess,
+      tries,
+      wrongs: wrongs.slice(-5).map((text) => ({ text })),
+      isCorrect: correct,
+      isOut: !correct && tries <= 0,
+      showForm: !correct && tries > 0,
+      onGuess: (e) => this.setState({ guess: e.target.value }),
+      submit: () => this.submit()
+    };
+  }
+}
+</script>
+</body>
+</html>

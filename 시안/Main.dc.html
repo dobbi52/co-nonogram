@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>전자칠판 함께 푸는 중</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=Press+Start+2P&display=swap">
+<style>
+body{margin:0}
+@keyframes cellflash{0%{opacity:1}50%{opacity:.25}100%{opacity:1}}
+.flash{animation:cellflash 1s steps(2,start) infinite}
+</style>
+</helmet>
+<div style="width: 1280px; height: 720px; box-sizing: border-box; padding: 18px 28px; background: #0B0F1A; color: #E8ECFF; font-family: 'Do Hyeon', sans-serif; display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; height: 56px">
+    <div style="display: flex; align-items: center; gap: 14px">
+      <div style="width: 34px; height: 34px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px" aria-hidden="true">
+        <i style="background: #39FF88"></i><i style="background: #1C2340"></i><i style="background: #39FF88"></i>
+        <i style="background: #1C2340"></i><i style="background: #FFE14D"></i><i style="background: #1C2340"></i>
+        <i style="background: #39FF88"></i><i style="background: #FF4FA3"></i><i style="background: #39FF88"></i>
+      </div>
+      <div>
+        <div style="font-size: 36px; line-height: 1; color: #39FF88">협동 노노그램</div>
+        <div style="font-family: 'Press Start 2P', monospace; font-size: 9px; letter-spacing: 2px; margin-top: 6px; color: #8A93C2">PIXEL NONOGRAM</div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px">
+      <div style="padding: 10px 14px; border: 3px solid #FFE14D; color: #FFE14D; font-family: 'Press Start 2P', monospace; font-size: 12px; display: flex; align-items: center; gap: 10px">CODE <b style="font-size: 20px; letter-spacing: 4px; font-weight: normal">4827</b></div>
+      <div style="padding: 10px 14px; border: 3px solid #FF4FA3; background: #FF4FA3; color: #0B0F1A; font-family: 'Press Start 2P', monospace; font-size: 12px; line-height: 20px">10×10</div>
+      <div style="padding: 10px 14px; border: 3px solid #3A4466; font-size: 19px; line-height: 20px">접속 <span style="font-family: 'Press Start 2P', monospace; font-size: 14px; color: #39FF88">24</span>명</div>
+      <button style="height: 46px; padding: 0 14px; background: transparent; border: 3px solid #3A4466; color: #8A93C2; font-family: 'Do Hyeon', sans-serif; font-size: 17px; cursor: pointer">BGM 켜짐</button>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 24px; flex: 1; min-height: 0; align-items: flex-start">
+
+    <div style="position: relative; width: 660px; height: 550px; flex: none; border: 4px solid #39FF88; background: #141A2E">
+      <img src="/_blob/592cbf96242b084c6a0b2b48b57e607b" alt="조각이 모여 나타나는 큰 그림" style="display: block; width: 660px; height: 550px; image-rendering: pixelated">
+      <div style="position: absolute; left: 0; top: 0; width: 660px; height: 550px; display: grid; grid-template-columns: repeat(6, 110px); grid-auto-rows: 110px">
+        <sc-for list="{{tiles}}" as="t" hint-placeholder-count="30">
+          <div>
+            <sc-if value="{{t.covered}}" hint-placeholder-val="{{ true }}">
+              <div style="width: 110px; height: 110px; box-sizing: border-box; padding: 10px; background: #141A2E; border: 2px {{t.lineStyle}} #3A4466; display: flex; flex-direction: column; justify-content: space-between">
+                <div style="font-family: 'Press Start 2P', monospace; font-size: 12px; color: #8A93C2">{{t.label}}</div>
+                <div style="display: flex; flex-direction: column; gap: 6px">
+                  <div style="font-size: 18px; color: {{t.nameColor}}">{{t.name}}</div>
+                  <div style="height: 8px; background: #1C2340">
+                    <div style="height: 8px; width: {{t.width}}; background: #4FC3FF"></div>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+            <sc-if value="{{t.latest}}" hint-placeholder-val="{{ false }}">
+              <div class="flash" style="width: 110px; height: 110px; box-sizing: border-box; border: 4px solid #FFE14D"></div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+
+      <div style="background: #141A2E; border: 4px solid #39FF88; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; justify-content: space-between; align-items: baseline">
+          <div style="font-size: 20px; color: #8A93C2">완성한 조각</div>
+          <div style="font-size: 18px; color: #8A93C2">시작하고 <span style="font-family: 'Press Start 2P', monospace; font-size: 12px; color: #FFE14D">07:41</span></div>
+        </div>
+        <div style="font-family: 'Press Start 2P', monospace; font-size: 36px; line-height: 1; color: #39FF88">{{doneCount}}<span style="font-size: 18px; color: #8A93C2"> / 30</span></div>
+        <div style="display: grid; grid-template-columns: repeat(30, minmax(0, 1fr)); gap: 3px; height: 14px">
+          <sc-for list="{{segs}}" as="seg" hint-placeholder-count="30">
+            <i style="display: block; background: {{seg.bg}}"></i>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="background: #141A2E; border: 4px solid #3A4466; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px">
+        <div style="font-size: 22px; color: #4FC3FF">방금 완성한 조각</div>
+        <div style="display: flex; align-items: center; justify-content: space-between; min-height: 32px; font-size: 21px; color: #FFE14D"><span>민지</span><span style="font-family: 'Press Start 2P', monospace; font-size: 12px">D3</span></div>
+        <div style="display: flex; align-items: center; justify-content: space-between; min-height: 32px; font-size: 21px"><span>준호</span><span style="font-family: 'Press Start 2P', monospace; font-size: 12px; color: #8A93C2">A5</span></div>
+        <div style="display: flex; align-items: center; justify-content: space-between; min-height: 32px; font-size: 21px"><span>서연</span><span style="font-family: 'Press Start 2P', monospace; font-size: 12px; color: #8A93C2">E1</span></div>
+      </div>
+
+      <div style="background: #141A2E; border: 4px solid #FF4FA3; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; justify-content: space-between; align-items: center">
+          <div style="font-size: 28px; color: #FF4FA3">무슨 그림일까?</div>
+          <div style="display: flex; gap: 6px; align-items: flex-end" aria-label="정답은 세 글자">
+            <i style="display: block; width: 26px; height: 6px; background: #FF4FA3"></i>
+            <i style="display: block; width: 26px; height: 6px; background: #FF4FA3"></i>
+            <i style="display: block; width: 26px; height: 6px; background: #FF4FA3"></i>
+          </div>
+        </div>
+        <div style="font-size: 20px">맞힌 친구 <span style="font-family: 'Press Start 2P', monospace; font-size: 18px; color: #39FF88">7</span>명</div>
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+          <span style="font-size: 19px; color: #FFE14D">땡!</span>
+          <span style="padding: 2px 10px; border: 2px solid #3A4466; font-size: 18px">강아지</span>
+          <span style="padding: 2px 10px; border: 2px solid #3A4466; font-size: 18px">호랑이</span>
+          <span style="padding: 2px 10px; border: 2px solid #3A4466; font-size: 18px">여우</span>
+          <span style="padding: 2px 10px; border: 2px solid #3A4466; font-size: 18px">곰</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":720}}'>
+const SOLVED = ['110111', '100110', '010101', '101110', '110101'];
+const WORKING = {
+  A3: ['지우', 70], B2: ['하준', 45], B3: ['', 0], B6: ['유나', 80], C1: ['도윤', 30], C3: ['소율', 55],
+  C5: ['시우', 90], D2: ['예린', 25], D6: ['건우', 60], E3: ['아린', 40], E5: ['태오', 75]
+};
+const LATEST = 'D3';
+
+class Component extends DCLogic {
+  renderVals() {
+    const tiles = [];
+    let doneCount = 0;
+    SOLVED.forEach((line, r) => {
+      line.split('').forEach((flag, c) => {
+        const label = 'ABCDE'[r] + (c + 1);
+        const done = flag === '1';
+        if (done) doneCount += 1;
+        const work = WORKING[label] || ['', 0];
+        tiles.push({
+          label,
+          covered: !done,
+          latest: label === LATEST,
+          name: work[0] || '비어 있어요',
+          nameColor: work[0] ? '#E8ECFF' : '#FFE14D',
+          lineStyle: work[0] ? 'solid' : 'dashed',
+          width: work[1] + '%'
+        });
+      });
+    });
+    const segs = Array.from({ length: 30 }, (_, i) => ({ bg: i < doneCount ? '#39FF88' : '#1C2340' }));
+    return { tiles, segs, doneCount };
+  }
+}
+</script>
+</body>
+</html>
