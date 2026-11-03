@@ -62,7 +62,9 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 .tile.open{border-color:transparent}
 .tile.open.mine{border-color:transparent}
 .tile .lab{font-family:var(--px);font-size:clamp(6px,1.25cqi,12px);color:var(--dim)}
-.tile .who{font-size:clamp(9px,2cqi,19px);line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .who{font-size:clamp(9px,2cqi,19px);line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .lab,.tile .who{align-self:flex-start;max-width:100%;background:rgba(20,26,46,.86);padding:1px 4px}
+.tile > div{display:flex;flex-direction:column}
 .tile.me .who{color:var(--green)}
 .tile.empty .who{color:var(--dim)}
 .tile .bar{height:clamp(3px,.8cqi,8px);background:var(--cell);margin-top:4%}
@@ -152,7 +154,8 @@ input[type=range]{flex:1;min-width:180px;accent-color:var(--green)}
 input[type=text]{background:var(--cell);border:3px solid var(--line2);color:var(--fg);font-family:var(--ko);font-size:18px;padding:8px 10px;width:160px}
 .readout{font-family:var(--px);font-size:14px;color:var(--yellow)}
 .sizes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.size{border:3px solid var(--line2);padding:10px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.size{border:3px solid var(--line2);background:transparent;color:var(--fg);text-align:left;padding:10px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.seg button .dim{color:inherit;opacity:.75}
 .size.on{border-color:var(--yellow)}
 .size .px{font-size:10px;color:var(--dim)}
 .size b{font-weight:normal;font-size:20px}
@@ -234,7 +237,7 @@ input[type=text]{background:var(--cell);border:3px solid var(--line2);color:var(
 <main class="stage">
   <section class="board-panel" id="boardPanel">
     <div class="board-col">
-      <div class="board-cap"><span>전자칠판</span><span id="boardHint">조각을 완성하면 색이 입혀져 나타나요</span></div>
+      <div class="board-cap"><span>전자칠판</span><span id="boardHint">맞게 칠한 칸이 바로 색으로 나타나요</span></div>
       <div class="board-box" id="boardBox">
         <canvas id="board"></canvas>
         <div class="tiles" id="tiles"></div>
@@ -272,21 +275,32 @@ input[type=text]{background:var(--cell);border:3px solid var(--line2);color:var(
 <div class="overlay" id="setup">
   <div class="sheet">
     <h2>방 만들기</h2>
-    <p>선생님이 학생 수를 넣으면 조각 수가 정해져요. 이 시제품에서는 내가 학생 한 명이 되고, 나머지는 가상 학생이 자동으로 풀어요.</p>
+    <p>선생님이 조각 수와 난이도를 고르면 방이 만들어져요. 이 시제품에서는 내가 학생 한 명이 되고, 나머지는 가상 학생이 자동으로 풀어요.</p>
     <div class="field">
-      <span>학생 수</span>
-      <div class="row"><input type="range" id="cnt" min="15" max="30" value="24"><span class="readout" id="cntOut">24명</span></div>
+      <span>조각 수</span>
+      <div class="sizes" id="sizes" role="radiogroup" aria-label="조각 수"></div>
     </div>
-    <div class="sizes" id="sizes"></div>
+    <div class="field">
+      <span>난이도</span>
+      <div class="seg" id="lvSeg">
+        <button data-v="normal" aria-pressed="true">보통 <span class="dim" style="font-size:14px">조각마다 3~5회</span></button>
+        <button data-v="hard" aria-pressed="false">어려움 <span class="dim" style="font-size:14px">조각마다 4~6회</span></button>
+      </div>
+    </div>
     <div class="field">
       <span>그림</span>
       <div class="pics" id="pics"></div>
     </div>
     <div class="field">
+      <span>들어올 학생 수 <span class="dim" style="font-size:15px">시험용, 실제로는 접속한 만큼</span></span>
+      <div class="row"><input type="range" id="cnt" min="10" max="35" value="24"><span class="readout" id="cntOut">24명</span></div>
+      <span class="dim" style="font-size:15px" id="cntNote"></span>
+    </div>
+    <div class="field">
       <span>내 이름</span>
       <div class="row"><input type="text" id="myname" value="나" maxlength="6"></div>
     </div>
-    <div class="row"><button class="btn" id="go">시작하기</button><span class="dim" style="font-size:15px">남는 조각은 먼저 끝낸 학생이 풀어요</span></div>
+    <div class="row"><button class="btn" id="go">방 만들기</button></div>
   </div>
 </div>
 
@@ -311,11 +325,14 @@ input[type=text]{background:var(--cell);border:3px solid var(--line2);color:var(
 <script>
 (()=>{
 'use strict';
-// ───── 그림 데이터 (그림/picture.json) ─────
-const PIC={"rows":["sSSSSSSssssSSSSSSSSssssSSSSSssssssssssssssssssssSSSssssssSSS","SSSSSSsssSSSSSSSSssssssSSSsssssssssssssssssssSSSSSSssssSSSSS","SSSSSssssSSSSossssssssssssssssssssSSSosssssSSSSSSSSsssSSSSSS","SSSsssssssSSsoOsssssssssssssssssSSSSOossssSSSSSSSMsssSSSSSSs","sssssssssssssoOOsssssSSSssssssSSSSSOOosssSSSSSMMMMMMMssSSSss","sssssssssssssoONOsssSSSSSSsssSSSSSONOossssSSMMMMMMMMMMMsssss","ssssssssssSSSoONNOOSSSSSSSSsssSSOONNOosssssMMMMMMMMMMMMMssss","SSsssssssSSSSoONNNOoSSSSSSSssssoONNNOosssssMMMMMMMMMMMMMSSSS","SSSSSSsssSSSSoONNNNoOsOOOoOOOsOoNNNNOossssMMMmmmMMMMMMMMMSSS","SSSSSSSSsssSSoONNNNNOOOOOoOOOOONNNNNOossssMMMmmmMMMMMMMMMSSS","SSSSSSSSsssssoONNNNNNOooOoOOoONNNNNNOoSSSSMMMmmmMMMMMMMMMsSS","sssSSSSSsssssoONNNOoOOOOOoOOOOOoONNNOoSSSMMMMMMMMMMmmmMMMMss","sssssssssssssoONOOOoOOOOOooOOOOoOOONOoSSSSMMMMMMMMmmmmmMMsss","sssssssssssssOOOOOOOOOOOOOOOOOOOOOOOOOSSSSMMMMMMMMmmmmmMMsss","ssssssSSSssssOOOOOOOOOOOOOOOOOOOOOOOOOsSSSMMMMMmMMmmmmmMMsss","sssssSSSSSsssOOOOOOeeOOOOOoOOOeeOOOOOOsssssMMMmmmMMmmmMMssss","sssSSSSSSSsssoooooeeeeOOOOOoOeeeeooooosssssMMMMmMMMMMMMMsssS","sSSSSSSSSssssOOOOOeeeeOOOOOOOeeeeOOOOOSSssssMMMMMMMMMMMssSSS","SSSSSSSsssssOOOOOoeeeeOOOOOOOeeeeOOOOOOSSssssSMMMMMMMssssSSS","SSSSsssssssssOOOOOOeeOOOOOOOOOeeOOOOOOSSsssSSSSSSMSssssssSSS","SSsssssssSsssoooooOOOOLlnnnLLOOOOoooooSsssSSSSSSSsssssssssss","sssssssssssSsOOOOOOOOLLLLnLLLLOOOOOOOOsssssSSSSsssssssssssSs","ssSssssSsSSSSOOOOOOOLlLLLnLLLlLOOOOOOOsssssssssssssSsSssSsSs","SsssSsssSSSSSSOOOOOLLLLLLLLLLLLLOOOOOssssssssssssssssssSSSSS","SSSSsssSSSSSSSSoooOOLLLeeLeeLLLOOooosssssssssSSssssSssSSSSSS","SSSSSsssSSSSSSSsOOOOOLLLLLLLLLOOOOOsssssssssSSSSSSssssSSSSSS","SSSSSSssSSsSSSSssOOOOOLLLLLLLoOOOOSSSSSsssssSSSSSSSSsssSSSSS","SSSSSssSsssssssssOOOOOoOOOOOOOOOOOSSSSSSSSsssSSSSSSSsssssssS","ssssssssssssssssOoooOOOOOOOoOOOoooOOOOOSSSSsssssSSSSsSssSsss","sssssssssssssssOOOOOoooOOOOOoooOOOOOOOOOSSSsssSsssssssssSsss","ssssssSSSsssssOOOOOOOOOooLooOOOOOOOOOooooossssssssssssssssss","sssssSSSSSSssoOOOOOOOOLLLlLLLOOOOOOOOosOOOOsssssssssSSSsssss","sssSSSSSSSSSOOoooOOOOLLLlLLLlLOOOOoooOOsOOOOssssssSSSSSSSsSs","ssSSSSSSSSssOOOOOoooLLLlLLLlLLLoooOOOOOSSOOOOOsssSSSSSSSSsSs","ssSSSSSSssssOOOOOOOLLLlLLLlLLLlLOOOOOOOSSSOOOOOSSSSSSSSsssss","ssSSSSssssssOOOOOOOLLlLLLlLLLlLLOOOOOOOSSSSooooSSSSSSssSssss","sssssssssssoooOOOOOLlLLLlLLLlLLLOOOOOoooSsssOOOOSSSsssssssss","ssssssssssssOOoooOOlLLLlLLLlLLLlOOoooOOsssssOOOOssSsssssssss","SsssssssssSSOOOOOolLLLlLLLlLLLlLLoOOOOOsssssOOOOOssssssssSSS","SSssssssSSSSOOOOOOOLLlLLLlLLLlLLOOOOOOOsssssOOOOsssssssSSSSS","SSSssssSSSSSOOOOOOOLlLLLlLLLlLLLOOOOOOOsssssoooosssssSSSSSSS","SSSSsssSSSSSSoOOOOOlLLLlLLLlLLLlOOOOOossssSOOOOSSsssSSSSSSSS","SSSssssssSSSSsoooOOLLLlLLLlLLLlLOOooosssssOOOOSSSSsssSSSSSSS","SSSssssssssssssOOoooLlLLLlLLLlLoooOOSSSSsOOOOSSSSSssssssSSSs","GgGGGGgGGGGgGGGGOOOOoLLLlLLLlLoOOOOGgGGGOOOOGGgGGGGgGGGGgGGG","gGGGGgGGGGgGGGGgGOOOOOLlLLLlLOOOOOGgGGGGgGGGGgGGGGgGGGGgGGGG","GGGgGGGGgGGGGgGGGGgGOOOOOLOOOOOGGgGGGGgGGGGgGGGGgGGGGgGGGGgG","GgGGGGgGGGGgGGGGgGGGGgGGGOgGGGGgGGGGgGGGGgGGGGgGGGGgGGGGgGGG","gGGGGgGGGGgGGGGgGGGGgGGGGgGGGGgGGGGgGGGGgGGGGgGGGGgGGGGgGGGG","GGGgGGGGgGGGGgGGGGgGGGGgGGGGgGGGGgGGGGgGGGGgGGGGgGGGGgGGGGgG"],"pal":{"S":"#31427E","s":"#18214A","M":"#FFE14D","m":"#D8B93A","O":"#FF9A3C","o":"#C4661C","L":"#FFE3C2","l":"#F2C79A","E":"#0B0F1A","e":"#0B0F1A","N":"#FF4FA3","n":"#FF4FA3","G":"#39C46A","g":"#1F8A4A"}};
+// ───── 그림 데이터 ─────
+// 지붕 위 고양이 (그림/roof-cat.json): 보통 = 조각마다 4회, 어려움 = 5회 훑어야 풀림
+const ROOF={"pal":{"S":"#33457F","s":"#1F2B5E","Y":"#FFE14D","y":"#E3C23A","M":"#FFF2B0","m":"#E2CF7C","W":"#C9D3F2","w":"#9EAAD4","R":"#E2504C","r":"#B23B3B","B":"#B8664A","b":"#8C4734","H":"#EBCB9C","h":"#CBA877","D":"#7C4B2B","d":"#5D3721","O":"#FF9A3C","o":"#D8772B","L":"#FFE6C8","l":"#F1C99C","E":"#0B0F1A","e":"#0B0F1A","N":"#FF4FA3","n":"#E13D8B","T":"#3CC46C","t":"#24935A","G":"#62D683","g":"#2F9E56"},"levels":{"normal":["sSSSSSSSssSSSsSSSSSsSssSssssssSSssssssssSsSSssSSsSSsSsSSSSSS","sSSssSSSsssSSSSSSSssssssSsssssSSSsssssssssSsSSSsssssssSSYsss","SSSsYsssssssSSssssssssYSSsSSSYsSSsssSSSSSwWWsssssssSssSYYYss","sSSYyYssssssSSssssssssOSSSSsSSssSossSSSwWwWWWssYssssSsssYsss","SsSsYssWwWsssSSsssssssSOSSSSSSssOSwWWWwWWWWWWSsssMMsSSssssss","SssswwWwWwwssSSSsssSSsSNOSSsSSsoNWWwWWWWwwWWWwSsMMMsSsSssSSs","sWWwWWwWWwWWSSSSSssSSSsONoOOOOoNOsWWWwWWWWwWwssMMMMSSSSsssSS","WWwWWwwWwWWwWSSSSSssWWWONNOOOoNNOssssssWSSsSsssMMmSSSSSSsSss","swWWwWWwWwwWSSSSSSsWWwWOOoOOOoOOOssssssSSSSsSSSMmMMSSSSSSsss","sSSSWWWWWSsSSSSSSSswWWWOeeOOOoeeOsssssSSSSSSSSMmMMMSSsSSSssS","sSSSSSSSSssssSSssSSsWwOOeeOoOOeeOOsssSSssSsSSSsMMMMSssssSSss","ssSSSSSSsssssssssWWwWssOOOOOOOOOoSSSsSSsssSsSSSMMmMMsssssSSs","SsssSSSsssssssssWwWWWwsoOOlNnLOOOSYSSsssSSsSSssMmMMMMMMsmMSS","ssssssSsSsssssSssWwWWSsSOOLLLLOOSYYYSssssSssssssMMMMMMMMMsSS","ssssssssssSSssssWssYSSsSSOoOoOOOssYSSsssssssssssSMMMMMMMssSS","sssssSssSSSSSsswWwYYYSSsOooOOOOOOssSSssssssssYSSSSSSMsSSSssS","ssssSsSSSSSSSSsWWwSYssSOOOOOOOOOoOssSSssssssSSSSSSSSSsssSssS","sssYSSSSSsSSSSssWSSSSSsoOOoLlLOOOOSsSSsssSSSsSSSSSSSSsssssss","sSsSSSSsSSSssBBBBBBBsssOOOLlLllOOOSSSSSsssSSSSsSSSssSsssssss","sSssSsSSSSssssbBBBbSssooOolLllLOOoOSsssSssSSSSSSSsssssssssSs","SSSSSSSsssssssbbbbbsssSOoOLLlLLOoOSSsSSSYSSSSSsSssTttTTtTtYs","sSSSssssssssssBBbBBssssoOOLlLllOOOsSOOOoOSssSssssTTtTTtRTttS","sSSsssssYsssSsbbbbbssSSOOOllLLLOOOOOosssOOossSssTTRTttTtTTtT","SssssssssssSSSbBBBbssSSsOoLLlLLoOoOssSsssSoOssssTTttTTtTtTtT","ssssssssSSSSSSbbbbbsrrrrrOOllLoOrorrRSSssssOsssSTTTtTttTTtTT","SsssssssSSSSSSBBBbBRrRRrrLLOOOLLrRRrrRSSssSSsssTtTTtRttTTtTT","SSssSSssSSSSSSbbbbRRrRRRrrRRrRRrrRRRrRRSSsSSSsTTTtTTtTTtTTTT","SSSsSsSssSSSSSbBrrrrRrrrrrRrrRRrrrrrrrrrrSSSStTTTtTtttTTtrTT","SSSSsssssssSSsbRRRrRRrRRRRrrRRrrRRrRRRrRRRSSStTTTRtTTTtTttTt","SSSSsssssssssRrRRRrRRRrRRRrRRrrRrRrRRRrRRRrRttTTtTTTTTRTTTtt","sSSSSsssssssrrrRrrrrrrrrrrrrrRrrrrrrrrrrrrrrrTTTtTTttTTtTTtT","sssSSssssssRrRRRrRRRRRRRrRRrrRRrrRRRRRRRrrRRrTTTTTTTTTTTTTtt","ssssSSssSRRRrRRRrrRRrRRRRRRRrRRrrrRRrrRrrRRRrRttTTTTTTTTTttT","sssssSSSrrrrrrRrrrrrRrRrrrrrrrRrRrrRrrrrrrRrrrrrrTttTTtTTTRT","sssSsSRRRRrRRRrRRRrrRRrRrrrrRRrRRRrRRrrRRRrRRRrRRRTTtttTTttT","sssssRrRRRrRRRrRRRrRrRrRRRrRrRrRrRRRrRrRRRrRRRrRRRrTTTtTstTs","sSSSrrrrrrrrrrrrRrrrrRrrrrrrrrrrrrrRrrrRrrrrrrrRrrrrDdDDssss","ssSSshhhhhhHhhhhhhHhhhhhHhhhhhhhhhHhhhhhhhhhhhhhhhhhDDDDssss","sssSSHHHHHHHhHhHHHhHHHHHDDDDdDDDHHHHhHHHHHhHHhHhHHHHDDDDssss","ssssshhHHDDDDDDDDHHHhHhHdDdDDDDDHhHHHHDDDDDDdDHHhHHhDDDDSSSs","ssssShhhhDYyDDyYDHhhhHhhdDDDDDdDhhhhhhDYYDDyYDhHhhhhDdDDSSSS","SSssshhHHDDDddDdDHHHHhHHDDddDDddHhhHHHDDDDdDDDHhHHHHDdDdssSS","sSSSsHHHHDYYDDyyDHHhHhHHDDDddDdDHHHhhHdyYDDYYdhHhhHHDDdDSSSs","SSSSshhhhDYyDDYYDhhhhhhHdDDdDDdDHhhHhhDYYDdYyDhHhhhhDdDDSsss","SSSSsHHHHDDDDDDDDhHHHhHHdDddDDDDHHHHHhDDddDDDdHhHHhhDDDDSsss","SSSSSHHHHhHHHHHHHHhHhHhHdDDDDDdDHHHHHHHHHHhHHhhhhHhhdDDDssss","sSSsshhhhhhhhhhHhhhhhHHHDDDDDdddhhhhHhhHhhhhHhhHHhhHDDDDssSs","GgNggGGYGGGgGYggggGGngGGGGGgGGgGgGYGGgGGGGgNGGgnggGggGGgGgYG","GNYNGGYNYgGGYNYGgGGNYngGggGGggGGGYNYGgGGGGNYNgnYNgGgGGggGyNY","ggGGGGGGGGGgGGgGGGGGgGGGgGgGGgGGGGggGGGgGggGGGGGGGGgGggGgGGG"],"hard":["sSSsSSSsssssSsSSsSSsSssssssssSSSssssSsssSSSSSSSSSSSsssSSSsSs","SsSsSSSSsssSsSSSSsSssssssssssSSSSssssssSsSSSSSSsssssssSSYsss","SSsSYSsssSSSSsSssSSsssYsSsSSSYsSSSssSSSSSWWWsssssssssssYYYss","SssyYYSsssSSSSSsSSSsssOSSSsSSSssSoSsSSSWWwWWWssYssssSsssYsss","ssssYsSWwWssSssssssSssSOSSSSsSssOSWWWWwWWWWwWSsssMMsSSssssss","SssswwWwWWwsSssssssSSsSNOSSSSSsONWWwWWWWwWWWWwssMMMsSSSsssSs","sWWwWWwWWwWWSSSSSssSSSSoNoOoOoONOSWWWWWwwwwWwssMMmMSSSSSssSS","WwwWwwwWWWWwWsssSSssWWWoNNOOooNNOssssssWSSsssssMMmSSSSSSSsss","swWwwWWwWWwWSSSSSSsWwwWOOoOOooOOOssssssSSSSSSSSMmMMSSSSSSsss","SsssWWwWWssSSSSSSSswwwWOeeOOOoeeOssssssSsSSSSSMmMMMSSsSSSsss","SsSSSSSSssssSSSssSSsWwoOeEOOoOeeOOsssSSsSSSSSSSMMmMsssssSSss","SSSsSSSsSsssssssswWwwSsooOOOOOOOoSSSssssSssSSSSMMMMMssssssSs","SsssSSSsSssssSsSWwwWWwsOOOLNnLOOOSYSSssssssSSsSMmMMMMMMsMMSS","ssssssSsSssssssssWWwWsSSOOlllLOOSYYYSsssSsSsssssMmMMMMMMMsSS","sssSsssssSssssssWssYSSSSsOOoOoOOssYSSsSsSssssssssMmmMMMMssSS","ssssssSSSsSSSsswWWYYYsSSOOoOooOOOssSSssssssSsYSSSSSSMsSSSssS","sSsSssSSSSSSSssWWwSYSSSOoOOoOOOOoOssSSsssssssSSSsSSSssssSssS","sssYSSSSSsSSSsssWSSSsSSoooOLllOoOOssSSsssSSSsSsSSSSSSsssssss","sssSSSSSSSSsSBBBBBBBsssOooLllLlOOOSSSSSsssSSsSSSSsssSsssssss","SSSSSSssSSSsSsbbBbbSssOOoollllLOOoOSssSSssSssSSsSsssssssssSs","SSSSSSSsssssssbbbbbsssSooOLllLLOOOssSssSYSSSSSssssTtttTtTTyS","SSSSssssssssssBBbBBssssOOOllLLlOOOSSoOOoOSssSssSsTTTTTtRttts","sSSsssssYsssSsbbbbbsSssOOOLLllLOOOOOosssOoosssSsTTRTtTtTTTTT","ssssssssSssSSSbBBBbssSSSooLLlLLOOoOssssSsSoOssssTTtTTTttTTTT","ssssssssSSSSSSbbbBbsrrrrrooLLLOOrorrrSSsssSOSssSTTtTttTTttTT","SssssSssSSSSSSBbbBBRRRRRrLLOOoLLrRRRrRSsssSssssTTTttrtTTttTt","SSssSSSsSSSSsSbbbbRRRrRRrRRRRRRRRRRRrRRSsssSssTTTtTtTTTTTTtT","SSSssSSssSSSSSbBrrrrrRRRrrrrrrrrrrrrRrrrRSSsStTTTTTTttTTtRTT","SSsSsssssssSSsbRRRrRRrrrRrRrRRrRRRrRRRrRRRSSSttTtRTTTTTttTTt","SSSSsssSsssssRrRRrrRrRRrrRrRRRrRRRrRRRrrRRRRtTTttTTttTrTTTTT","sSsSssssssssrrrrrrrrrrRrRrrrrrrrrrrrRrrrRrrrRTTTTTTttTTtTTTT","sssSSssssssRrRRRrRRrrRRRrrRRrRRRrRRRrRRRRRRrrTTTTTTTtTTtTTtt","ssssSSssSRRrrRRRrRRRrrRRrRRRrRRrrRRRrRRRrRRRrRttTTtTTTTTTTtT","sssssSSSrrRrrrrrrrrrrrrrRrrrrrrrrrrrrrRRRrrrrrrrrTttTtttTTRT","sssssSRRRRrRrRrRrRrRrRrRRRrRRRrRRRrRRRrRRRrrrRRRRRTTTttTTTTT","sSsssRrRRRrRRRrRRRrRRRrRRRrRRRrRrRRRRRrRRrrRrRrRRrrTTtTTstts","sSSSRrrrrrrrrrRrrrrrrrrrRrrrrRrrRrrrrrrrrrrRRrrrrrrrddDdssss","ssSSshhhhhhhhhhhhhHhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhDDdDsSss","sssSSHHHHhHHhHHHhHhHHHhHDDDDDDDDHHhhhHHHHHHHhhhHHHHHDDDDsssS","ssSsSHhHHDDDDDDDDHHHHHHHDDDdDDdDHhHHHHDddDDDDDHHHHhhDDDDsSSs","ssssShhhhdYyDDyYDhhHhhhhDdddDDdDHhhhHhdYYDDyyDhhhhhhDdDDSSSs","SSsssHHHHDDDdDdDDhhHHHHhddDDDDddHhhHHHDDDddDDDHHhHHhDDDDSSSS","sSSSshHHHDYYDdyyDHHhHhhHdDDDDDDdHHHHHHDyYdDYYDHhhHHHDDDDSSSS","SSSSshhHhDyydDyYdhhhhhhHDDDDDddDHHhhhhDyYdDyyDhhHhHhDDDDsssS","SSSSsHHHHDDDDDDDDhHHhhhHDDdDDdDDHHHHHHdDDdDDDDHHhHHHDDDDsSss","SSSSSHHHHhhHhHHHHHHhHHHhDDDdDdddhHHHHHHHHHhHhhHHhhHHDDDDSSss","sSssshhhhhHhhhhhhhHhHhhhdDDDDdDDhhHhhHhhhhhhhhhHhhhhDDDDsssS","GgNGgggYgGGggYggggggNGGgGggGgggGgGyGGGGGGGgNggGnGGgGGgGgggYg","gnYNGGYnYGGGYNYgGGGNYNgGGGGgGGGGGYNYGgGGGGNYnGnYNGgGgGGGGYNY","ggGGGGggGGGggGgGgGGGgGGGGGggggGGGGGGGGGgGgGGggGGGGGGGGggggGG"]}};
 
-const LAYOUTS=[{n:16,c:4,r:4,w:40,h:40,pic:'부엉이'},{n:20,c:5,r:4,w:50,h:40,pic:'로켓 발사'},{n:25,c:5,r:5,w:50,h:50,pic:'문어'},{n:30,c:6,r:5,w:60,h:50,pic:'공룡'}];
-const NAMES=['민준','서연','도윤','서윤','하준','지우','은우','하은','시우','지유','주원','수아','지호','윤서','예준','채원','유준','지안','건우','소율','우진','다은','선우','예린','연우','시아','서진','하린','준서'];
+// ox, oy: 60×50 그림에서 잘라 쓸 위치(조각 단위). 조각 경계로 자르므로 조각마다 퍼즐 검사는 그대로 유지됨
+const LAYOUTS=[{n:16,c:4,r:4,w:40,h:40,ox:1,oy:1,pic:'부엉이'},{n:20,c:5,r:4,w:50,h:40,ox:0,oy:1,pic:'로켓 발사'},{n:25,c:5,r:5,w:50,h:50,ox:0,oy:0,pic:'문어'},{n:30,c:6,r:5,w:60,h:50,ox:0,oy:0,pic:'공룡'}];
+const LEVELS={normal:{name:'보통',d:'조각마다 3~5회'},hard:{name:'어려움',d:'조각마다 4~6회'}};
+const NAMES=['민준','서연','도윤','서윤','하준','지우','은우','하은','시우','지유','주원','수아','지호','윤서','예준','채원','유준','지안','건우','소율','우진','다은','선우','예린','연우','시아','서진','하린','준서','수민','태윤','가은','민서','현우','나은','지성','예나','도현','서아'];
 const ROWL='ABCDE';
 const MARGIN=5; // 장식 테두리 칸 수
 const CPX=8;    // 칠판 그림 한 칸의 내부 해상도
@@ -359,37 +376,40 @@ const SPRITES=[
 
 // ───── 상태 ─────
 const $=id=>document.getElementById(id);
-let S=null, speed=5, device='phone', setupCount=24, raf=0, last=0;
+let S=null, speed=5, device='phone', setupCount=24, setupPieces=25, setupLevel='normal', raf=0, last=0;
 const rnd=(a,b)=>a+Math.random()*(b-a);
 const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
-const layoutFor=n=>LAYOUTS.find(l=>l.n>=n)||LAYOUTS[3];
 
-function newGame(count,myname){
-  const L=layoutFor(count);
+function newGame(pieceN,level,count,myname){
+  const L=LAYOUTS.find(l=>l.n===pieceN)||LAYOUTS[2];
+  const rows=ROOF.levels[level];
   const pieces=[];
   for(let r=0;r<L.r;r++)for(let c=0;c<L.c;c++){
     const sol=[],ch=[];
-    for(let y=0;y<10;y++){sol.push([]);ch.push([]);for(let x=0;x<10;x++){const k=PIC.rows[r*10+y][c*10+x];sol[y].push(k===k.toUpperCase()?1:0);ch[y].push(k)}}
+    for(let y=0;y<10;y++){sol.push([]);ch.push([]);for(let x=0;x<10;x++){const k=rows[(r+L.oy)*10+y][(c+L.ox)*10+x];sol[y].push(k===k.toUpperCase()?1:0);ch[y].push(k)}}
     const fills=[];for(let y=0;y<10;y++)for(let x=0;x<10;x++)if(sol[y][x])fills.push([y,x]);
-    pieces.push({id:pieces.length,r,c,label:ROWL[r]+(c+1),sol,ch,fills,owner:null,done:false,by:[],helpers:[],request:false,grid:null,order:shuffle(fills.slice())});
+    pieces.push({id:pieces.length,r,c,label:ROWL[r]+(c+1),sol,ch,fills,owner:null,done:false,by:[],helpers:[],request:false,grid:null,order:fills.slice()});
   }
   const students=[{id:0,name:myname||'나',bot:false,mode:'solve',piece:null,helpTarget:null,declined:false,helps:0,decor:0,pieces:[]}];
   const names=shuffle(NAMES.filter(n=>n!==myname));
-  for(let i=1;i<count;i++)students.push({id:i,name:names[i-1],bot:true,mode:'solve',piece:null,prog:0,dur:rnd(240,540),willAsk:Math.random()<.12,asked:false,helpTarget:null,hintT:0,decorT:0,helps:0,decor:0,pieces:[]});
+  for(let i=1;i<count;i++)students.push({id:i,name:names[i-1]||('학생'+i),bot:true,mode:'solve',piece:null,prog:0,dur:rnd(240,540),willAsk:Math.random()<.12,asked:false,helpTarget:null,hintT:0,decorT:0,helps:0,decor:0,pieces:[]});
   const order=shuffle(pieces.map(p=>p.id));
-  students.forEach((s,i)=>assign(s,pieces[order[i]],true,pieces));
-  S={L,pieces,students,decor:[],slots:makeSlots(L),log:[],t:0,lastDone:null,lastDoneAt:0,phase:'play',
+  students.forEach((s,i)=>{if(i<pieces.length)assign(s,pieces[order[i]],true);else{s.mode='idle';s.piece=null}});
+  S={L,level,pieces,students,decor:[],slots:makeSlots(L),log:[],t:0,lastDone:null,lastDoneAt:0,phase:'play',
      me:{tool:'fill',decorSol:null,decorGrid:null,decorSprite:null,decorDone:false,hl:null,toast:null,cool:0,justDone:null}};
   $('code').textContent=String(1000+Math.floor(Math.random()*9000));
   $('joined').textContent=count;
-  $('sizeChip').textContent=`${L.n}조각 · ${L.c}×${L.r}`;
-  log(`${count}명 접속, ${L.n}조각으로 시작`);
+  $('sizeChip').textContent=`${L.n}조각 · ${LEVELS[level].name}`;
+  log(`${count}명 접속, ${L.n}조각 ${LEVELS[level].name}으로 시작`);
+  if(count>L.n)log(`조각보다 ${count-L.n}명 많아서 친구 돕기·꾸미기로 시작`);
   renderAll(true);
 }
 function assign(s,p,initial,pieces){
   p=p||null;s.piece=p?p.id:null;s.mode='solve';s.helpTarget=null;
   if(!p)return;
   p.owner=s.id;
+  // 가상 학생은 사람처럼 줄을 따라 칠해 나감 (가로 또는 세로 방향, 조금씩 섞임)
+  const byRow=Math.random()<.5;p.order=p.fills.map(f=>[f,(byRow?f[0]:f[1])+Math.random()*3.5]).sort((a,b)=>a[1]-b[1]).map(a=>a[0]);
   if(s.bot){s.prog=0;s.dur=rnd(240,540)*(initial?1:.85);s.asked=false;s.willAsk=Math.random()<.12}
   else{p.grid=[...Array(10)].map(()=>Array(10).fill(0))}
 }
@@ -513,9 +533,10 @@ function drawPicture(cv,{all=false,scale=CPX}={}){
   x.fillStyle='#10152A';
   for(let yy=0;yy<H;yy++)for(let xx=0;xx<W;xx++){if(xx<MARGIN||yy<MARGIN||xx>=W-MARGIN||yy>=H-MARGIN){if((xx+yy)%2===0)x.fillRect(xx*scale,yy*scale,scale,scale)}}
   for(const p of S.pieces){
+    const shown=all||p.done?null:shownCells(p);
     for(let y=0;y<10;y++)for(let xx=0;xx<10;xx++){
       const gx=(MARGIN+p.c*10+xx)*scale,gy=(MARGIN+p.r*10+y)*scale;
-      if(p.done||all){x.fillStyle=PIC.pal[p.ch[y][xx]];x.fillRect(gx,gy,scale,scale)}
+      if(!shown||shown[y*10+xx]){x.fillStyle=ROOF.pal[p.ch[y][xx]];x.fillRect(gx,gy,scale,scale)}
       else{x.fillStyle='#1A2038';x.fillRect(gx+1,gy+1,scale-2,scale-2)}
     }
   }
@@ -523,6 +544,14 @@ function drawPicture(cv,{all=false,scale=CPX}={}){
     const[sx,sy]=d.slot;x.fillStyle=d.sprite.c;
     d.sprite.sol.forEach((row,yy)=>row.forEach((v,xx)=>{if(v)x.fillRect((sx+xx)*scale,(sy+yy)*scale,scale,scale)}));
   }
+}
+// 칠판에 보일 칸: 맞게 칠한 칸만 (틀린 칸은 칠판에 나오지 않음)
+function shownCells(p){
+  const m=new Uint8Array(100);if(p.owner==null)return m;
+  const s=S.students[p.owner];
+  if(s.bot){const k=Math.floor(Math.min(1,s.prog)*p.order.length);for(let i=0;i<k;i++){const[y,x]=p.order[i];m[y*10+x]=1}}
+  else for(const[y,x]of p.fills)if(p.grid[y][x]===1)m[y*10+x]=1;
+  return m;
 }
 function placeTiles(el){
   const L=S.L,W=L.w+MARGIN*2,H=L.h+MARGIN*2;
@@ -824,13 +853,18 @@ function loop(ts){
 
 // ───── 설정 화면 ─────
 function renderSetup(){
-  const L=layoutFor(setupCount);
+  const L=LAYOUTS.find(l=>l.n===setupPieces);
   $('cntOut').textContent=setupCount+'명';
-  $('sizes').innerHTML=LAYOUTS.map(l=>`<div class="size${l===L?' on':''}"><span class="px">${l.c}×${l.r}</span><b>${l.n}조각</b><div class="mg" style="grid-template-columns:repeat(${l.c},8px)">${'<i></i>'.repeat(l.n)}</div><span class="dim" style="font-size:14px">${l.w}×${l.h}칸</span></div>`).join('');
-  $('pics').innerHTML=`<div class="pic on">고양이 <span class="dim" style="font-size:15px">시험용, ${L.n}조각 크기로 잘라 씀</span><span class="px">READY</span></div><div class="pic off">${L.pic} <span class="dim" style="font-size:15px">${L.n}조각용으로 만들 그림</span><span class="px">SOON</span></div>`;
+  $('cntNote').textContent=setupCount>L.n?`조각보다 ${setupCount-L.n}명 많아요. 남는 학생은 처음부터 친구 돕기와 꾸미기를 해요.`
+    :setupCount<L.n?`조각이 ${L.n-setupCount}개 남아요. 먼저 끝낸 학생이 이어서 풀어요.`:'학생과 조각 수가 같아요.';
+  $('sizes').innerHTML=LAYOUTS.map(l=>`<button class="size${l===L?' on':''}" role="radio" aria-checked="${l===L}" data-n="${l.n}"><span class="px">${l.c}×${l.r}</span><b>${l.n}조각</b><div class="mg" style="grid-template-columns:repeat(${l.c},8px)">${'<i></i>'.repeat(l.n)}</div><span class="dim" style="font-size:14px">${l.w}×${l.h}칸</span></button>`).join('');
+  $('sizes').querySelectorAll('button').forEach(b=>b.onclick=()=>{setupPieces=+b.dataset.n;renderSetup()});
+  $('pics').innerHTML=`<div class="pic on">지붕 위 고양이 <span class="dim" style="font-size:15px">시험용, ${L.n<30?L.n+'조각 크기로 잘라 씀':'원래 크기'}</span><span class="px">READY</span></div><div class="pic off">${L.pic} <span class="dim" style="font-size:15px">${L.n}조각용으로 만들 그림</span><span class="px">SOON</span></div>`;
+  document.querySelectorAll('#lvSeg button').forEach(x=>x.setAttribute('aria-pressed',x.dataset.v===setupLevel));
 }
+document.querySelectorAll('#lvSeg button').forEach(b=>b.onclick=()=>{setupLevel=b.dataset.v;renderSetup()});
 $('cnt').addEventListener('input',e=>{setupCount=+e.target.value;renderSetup()});
-$('go').onclick=()=>{$('setup').hidden=true;newGame(setupCount,($('myname').value||'나').trim().slice(0,6));lastSig=''};
+$('go').onclick=()=>{$('setup').hidden=true;newGame(setupPieces,setupLevel,setupCount,($('myname').value||'나').trim().slice(0,6));lastSig=''};
 $('restart').onclick=()=>{$('result').hidden=true;$('setup').hidden=false;renderSetup()};
 $('again').onclick=()=>{$('result').hidden=true;$('setup').hidden=false;renderSetup()};
 $('toggleNames').onclick=e=>{showNames=!showNames;e.target.setAttribute('aria-pressed',showNames);e.target.textContent=showNames?'그림만 보기':'칠한 사람 보기';paintResTiles();if(!$('saveBox').hidden)makeImage()};
@@ -851,7 +885,7 @@ let rz=0;window.addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()
 
 // 첫 화면: 예시 판을 깔아 두고 설정을 띄움
 renderSetup();
-newGame(24,'나');
+newGame(25,'normal',24,'나');
 raf=requestAnimationFrame(loop);
 })();
 </script>
