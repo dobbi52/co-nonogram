@@ -5,19 +5,27 @@ import { firebaseConfig } from './firebase-config.js';
 
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
 let impl = null;
+
+// 연결 실패 이유를 사람이 읽을 수 있게
+export function explain(e) {
+  const c = (e && e.code) || '';
+  if (c === 'auth/operation-not-allowed' || c === 'auth/admin-restricted-operation') return 'Firebase에서 익명 로그인이 꺼져 있어요. Authentication → 로그인 방법 → 익명을 켜 주세요.';
+  if (c === 'auth/unauthorized-domain') return `이 주소(${location.hostname})가 승인된 도메인에 없어요. Authentication → 설정 → 승인된 도메인에 추가해 주세요.`;
+  if (c === 'auth/configuration-not-found') return 'Firebase에서 Authentication을 아직 시작하지 않았어요. Authentication → 시작하기를 눌러 주세요.';
+  if (c === 'auth/network-request-failed' || /network|fetch/i.test(String(e))) return '인터넷에 연결되어 있지 않거나 Firebase에 닿지 않아요. 연결을 확인하고 새로고침해 주세요.';
+  return '서버에 연결하지 못했어요. (' + (c || (e && e.message) || e) + ')';
+}
 export let mode = 'local';
 let myUid = null;
 
 export async function connect() {
   if (impl) return mode;
   if (firebaseConfig) {
-    try {
-      impl = await firebaseImpl();
-      mode = 'firebase';
-      return mode;
-    } catch (e) {
-      console.error('Firebase 연결 실패, 시험 모드로 전환', e);
-    }
+    // 설정이 있는데 연결이 안 되면 시험 모드로 넘어가지 않고 이유를 알려 준다
+    // (조용히 넘어가면 칠판과 학생이 서로 다른 곳에 연결돼 "그런 방이 없어요"가 뜬다)
+    impl = await firebaseImpl();
+    mode = 'firebase';
+    return mode;
   }
   impl = localImpl();
   mode = 'local';

@@ -25,7 +25,12 @@ function home() {
 
 async function start() {
   try { await net.connect(); }
-  catch (e) { app.innerHTML = `<p class="err">서버에 연결하지 못했어요. 새로고침해 주세요.</p>`; return; }
+  catch (e) {
+    console.error(e);
+    app.innerHTML = `<div class="sheet" style="border-color:var(--pink)"><h2 style="color:var(--pink)">서버에 연결하지 못했어요</h2><p></p><div class="row"><button class="btn" onclick="location.reload()">다시 시도</button></div></div>`;
+    app.querySelector('p').textContent = net.explain(e);
+    return;
+  }
   const q = new URLSearchParams(location.search);
   const code = (q.get('board') || q.get('room') || '').replace(/\D/g, '').slice(0, 4);
   if (q.has('board') && code) openBoard(code);
