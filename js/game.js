@@ -142,6 +142,12 @@ export function decorSlots(w, h, seed) {
   return shuffle(out, rng(seed));
 }
 
+// 받침에 맞는 조사: josa('서연', '이', '가') → '서연이', josa('하준', '이', '가') → '하준이', josa('도윤이와 지우', ...)는 마지막 글자로
+export function josa(word, withFinal, without) {
+  const ch = String(word || '').trim().slice(-1), code = ch.charCodeAt(0) - 0xAC00;
+  const has = code >= 0 && code <= 11171 ? code % 28 !== 0 : false;
+  return word + (has ? withFinal : without);
+}
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // ───── 큰 그림 그리기 (칠판, 완성 이미지 공용) ─────

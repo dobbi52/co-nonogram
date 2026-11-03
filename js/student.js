@@ -1,7 +1,7 @@
 // 학생 화면: 코드로 들어가기 → 기다리기 → 내 조각 풀기 / 친구 돕기 / 꾸미기 퍼즐 → 완성
 import * as net from './net.js';
 import { app, brand, modeNotice, toast, go } from './ui.js';
-import { buildPieces, LEVELS, LEVEL_KEYS, decorSlots, SPRITES, esc, EMPTY, toGrid, fromGrid, isSolved, lineMatches, filledCount, buildGrid, MAX_HELPERS, CHECKS_PER_PIECE } from './game.js';
+import { buildPieces, josa, LEVELS, LEVEL_KEYS, decorSlots, SPRITES, esc, EMPTY, toGrid, fromGrid, isSolved, lineMatches, filledCount, buildGrid, MAX_HELPERS, CHECKS_PER_PIECE } from './game.js';
 
 let code = null, sid = null, myName = '', myLevel = 'normal', R = null, built = null, unsub = null, raf = 0;
 let lastSig = '', gridCtl = null, tool = 1;
@@ -189,10 +189,10 @@ function drawSolve(m) {
   const p = built.pieces[m.piece], rec = pieceRec(p.id);
   if (gridPiece !== p.id) { grid = toGrid(cellsOf(p.id)); gridPiece = p.id; wrong = null; confirmClear = false; lastRevealAt = rec.reveal || 0; }
   const hs = Object.entries(rec.helpers || {});
-  const names = hs.map(([, n]) => esc(n)).join(', ');
+  const names = esc(josa(hs.map(([, n]) => n).join(', '), '이', '가'));
   let banner = '';
-  if (hs.length) banner = rec.request ? `<div class="banner"><span>${names}가 도와주는 중</span></div>`
-    : `<div class="banner"><span>${names}가 도와주러 왔어요</span><button class="btn small ghost" id="decline">괜찮아</button></div>`;
+  if (hs.length) banner = rec.request ? `<div class="banner"><span>${names} 도와주는 중</span></div>`
+    : `<div class="banner"><span>${names} 도와주러 왔어요</span><button class="btn small ghost" id="decline">괜찮아</button></div>`;
   else if (rec.request) banner = `<div class="banner pink"><span>도와줘를 보냈어요. 먼저 끝낸 친구가 와요</span></div>`;
   const left = CHECKS_PER_PIECE + (rec.bonus || 0) - (rec.checks || 0);
   app.innerHTML = '<div class="phone">' + head(`내 조각 <span class="px">${p.label}</span> · ${(LEVELS[built.levelOf(p.id)] || {}).name || ''}`, '', p.id) + `<div class="grid-host" id="gh"></div>${banner}
