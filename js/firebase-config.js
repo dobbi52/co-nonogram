@@ -11,4 +11,12 @@
 //   appId: "1:123:web:abc",
 // };
 
-export const firebaseConfig = null;
+export const firebaseConfig = {
+  apiKey: "AIzaSyBZ7wMU4RnIjHmFheirSTatLwMb3FHxl8M",
+  authDomain: "co-nonogram.firebaseapp.com",
+  databaseURL: "https://co-nonogram-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "co-nonogram",
+  storageBucket: "co-nonogram.firebasestorage.app",
+  messagingSenderId: "72399562290",
+  appId: "1:72399562290:web:8a1560339ed6923d7a7e2b",
+};
