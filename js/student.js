@@ -7,7 +7,7 @@ let code = null, sid = null, myName = '', R = null, built = null, unsub = null, 
 let lastSig = '', gridCtl = null, tool = 1;
 let grid = null, gridPiece = null, writeTimer = 0;
 let wrong = null, wrongUntil = 0, msgOverride = null;
-let justDone = null, lastHlAt = 0, hintCool = 0, prevMode = null, prevTarget = null;
+let justDone = null, lastHlAt = 0, lastRevealAt = 0, confirmClear = false, hintCool = 0, prevMode = null, prevTarget = null;
 let decor = null; // { sp, g, done }
 const ss = { get: (k) => { try { return sessionStorage.getItem(k); } catch (_) { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch (_) {} } };
 const base = () => `rooms/${code}`;
@@ -85,7 +85,7 @@ function schedule() { if (raf) return; raf = requestAnimationFrame(() => { raf =
 function signature() {
   const m = me(); const st = R.meta.status;
   const parts = [st, m && m.mode, m && m.piece, m && m.helpTarget, m && m.want, decor && decor.done];
-  if (m && m.mode === 'solve') { const r = pieceRec(m.piece); parts.push(Object.keys(r.helpers || {}).join(), !!r.request, r.checks || 0); }
+  if (m && m.mode === 'solve') { const r = pieceRec(m.piece); parts.push(Object.keys(r.helpers || {}).join(), !!r.request, r.checks || 0, r.bonus || 0, confirmClear); }
   if (m && m.mode === 'free') {
     parts.push(built.pieces.filter((p) => !pieceRec(p.id).done && !pieceRec(p.id).owner).length,
       built.pieces.map((p) => { const r = pieceRec(p.id); return r.done ? 'd' : (r.owner ? (r.request ? 'r' : 'o') + Object.keys(r.helpers || {}).length : '-'); }).join(''),
@@ -152,18 +152,21 @@ function draw() {
 // ───── 내 조각 풀기 ─────
 function drawSolve(m) {
   const p = built.pieces[m.piece], rec = pieceRec(p.id);
-  if (gridPiece !== p.id) { grid = toGrid(cellsOf(p.id)); gridPiece = p.id; wrong = null; }
+  if (gridPiece !== p.id) { grid = toGrid(cellsOf(p.id)); gridPiece = p.id; wrong = null; confirmClear = false; lastRevealAt = rec.reveal || 0; }
   const hs = Object.entries(rec.helpers || {});
   const names = hs.map(([, n]) => esc(n)).join(', ');
   let banner = '';
   if (hs.length) banner = rec.request ? `<div class="banner"><span>${names}가 도와주는 중</span></div>`
     : `<div class="banner"><span>${names}가 도와주러 왔어요</span><button class="btn small ghost" id="decline">괜찮아</button></div>`;
   else if (rec.request) banner = `<div class="banner pink"><span>도와줘를 보냈어요. 먼저 끝낸 친구가 와요</span></div>`;
-  const left = CHECKS_PER_PIECE - (rec.checks || 0);
+  const left = CHECKS_PER_PIECE + (rec.bonus || 0) - (rec.checks || 0);
   app.innerHTML = '<div class="phone">' + head(`내 조각 <span class="px">${p.label}</span>`, '', p.id) + `<div class="grid-host" id="gh"></div>${banner}
     <div class="msg" id="msg"></div>${toolsHtml()}
-    <div class="subtools">${rec.request || hs.length ? '<span></span>' : '<button class="btn ghost small" id="ask">도와줘</button>'}
-      <button class="btn ghost small" id="check" ${left > 0 ? '' : 'disabled'}>검사하기 ${left > 0 ? `(${left}번 남음)` : '(다 씀)'}</button></div></div>`;
+    ${confirmClear
+      ? `<div class="banner pink"><span>정말 다 지울까요?</span><span class="row" style="gap:8px"><button class="btn small pink" id="clearYes">지우기</button><button class="btn small ghost" id="clearNo">취소</button></span></div>`
+      : `<div class="subtools three">${rec.request || hs.length ? '<span></span>' : '<button class="btn ghost small" id="ask">도와줘</button>'}
+      <button class="btn ghost small" id="check" ${left > 0 ? '' : 'disabled'}>검사하기 ${left > 0 ? `(${left})` : '(다 씀)'}</button>
+      <button class="btn ghost small" id="clear">전체 지우기</button></div>`}</div>`;
   gridCtl = buildGrid(document.getElementById('gh'), {
     sol: p.sol, editable: true, tool: () => tool,
     get: (r, c) => grid[r][c],
@@ -180,16 +183,31 @@ function drawSolve(m) {
     for (const [hid] of hs) { patch[`${base()}/students/${hid}/mode`] = 'free'; patch[`${base()}/students/${hid}/helpTarget`] = null; }
     net.update(patch);
   };
-  document.getElementById('check').onclick = () => {
-    if ((pieceRec(p.id).checks || 0) >= CHECKS_PER_PIECE) return;
-    const w = new Set(); for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) if (grid[r][c] === 1 && !p.sol[r][c]) w.add(r * 10 + c);
-    wrong = w; wrongUntil = Date.now() + 6000;
-    msgOverride = w.size ? { t: `틀린 칸 ${w.size}개를 분홍으로 보여 줬어요`, c: 'bad' } : { t: '틀린 칸은 없어요. 아직 덜 칠한 칸이 있어요', c: 'ok' };
-    net.update({ [`${base()}/pieces/p${p.id}/checks`]: (pieceRec(p.id).checks || 0) + 1 });
-    gridCtl.refresh(); updateMsg();
-    setTimeout(() => { if (gridCtl) { gridCtl.refresh(); } }, 6100);
+  const ck = document.getElementById('check');
+  if (ck) ck.onclick = () => {
+    const r2 = pieceRec(p.id);
+    if ((r2.checks || 0) >= CHECKS_PER_PIECE + (r2.bonus || 0)) return;
+    showWrong(p, '');
+    net.update({ [`${base()}/pieces/p${p.id}/checks`]: (r2.checks || 0) + 1 });
   };
+  const cl = document.getElementById('clear');
+  if (cl) cl.onclick = () => { confirmClear = true; lastSig = ''; schedule(); };
+  const cy = document.getElementById('clearYes');
+  if (cy) cy.onclick = () => {
+    grid = grid.map((r) => r.map(() => 0)); wrong = null; msgOverride = null; confirmClear = false;
+    flush(p.id); lastSig = ''; schedule();
+  };
+  const cn = document.getElementById('clearNo');
+  if (cn) cn.onclick = () => { confirmClear = false; lastSig = ''; schedule(); };
   updateMsg();
+}
+// 틀린 칸을 잠깐 분홍으로 보여 준다 (검사하기, 또는 선생님이 보여 줄 때)
+function showWrong(p, who) {
+  const w = new Set(); for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) if (grid[r][c] === 1 && !p.sol[r][c]) w.add(r * 10 + c);
+  wrong = w; wrongUntil = Date.now() + 6000;
+  msgOverride = w.size ? { t: `${who}틀린 칸 ${w.size}개를 분홍으로 보여 줬어요`, c: 'bad' } : { t: `${who}틀린 칸은 없어요. 아직 덜 칠한 칸이 있어요`, c: 'ok' };
+  if (gridCtl) gridCtl.refresh(); updateMsg();
+  setTimeout(() => { msgOverride = null; if (gridCtl) { gridCtl.refresh(); updateMsg(); } }, 6100);
 }
 function updateMsg() {
   const el = document.getElementById('msg'); const m = me();
@@ -231,6 +249,8 @@ function currentHl() {
 }
 function checkHighlight() {
   const m = me(); if (!m || m.mode !== 'solve' || m.piece == null) return;
+  const rv = pieceRec(m.piece).reveal || 0;
+  if (rv > lastRevealAt && grid && gridPiece === m.piece) { lastRevealAt = rv; showWrong(built.pieces[m.piece], '선생님이 '); }
   const h = (R.hl || {})['p' + m.piece];
   if (h && h.at > lastHlAt && h.by !== sid && Date.now() - h.at < 5000) {
     lastHlAt = h.at;

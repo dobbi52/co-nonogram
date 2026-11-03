@@ -2,7 +2,7 @@
 // 칠판 화면은 "진행 맡은 칠판"으로서 조각 배정, 자리 비운 학생 정리, 완성 판정을 맡는다.
 import * as net from './net.js';
 import { app, brand, modeNotice, toast, go, joinUrl } from './ui.js';
-import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorSlots, esc, shuffle, EMPTY, MAX_HELPERS } from './game.js';
+import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorSlots, esc, shuffle, EMPTY, MAX_HELPERS, CHECKS_PER_PIECE, buildGrid, toGrid } from './game.js';
 
 const OFFLINE_RELEASE_MS = 45000; // 조각을 맡은 학생이 이만큼 접속이 끊기면 조각을 다른 학생에게 넘긴다
 const setup = { pieces: 25, level: 'normal', picture: PICTURES[0].id };
@@ -30,7 +30,6 @@ function thumb(pic) {
 export function openSetup() {
   go(null);
   document.title = '방 만들기 · 협동 노노그램';
-  const pic = PICTURES.find((p) => p.id === setup.picture);
   app.innerHTML = `<div class="top">${brand('NEW ROOM')}</div>
   <div class="sheet">
     <h2>방 만들기</h2>
@@ -38,8 +37,8 @@ export function openSetup() {
     <div class="field"><span>조각 수</span><div class="sizes" id="sizes" role="radiogroup" aria-label="조각 수"></div>
       <span class="dim" style="font-size:16px">학생이 조각보다 많으면 남는 학생은 처음부터 친구 돕기와 꾸미기를 해요. 조각이 남으면 먼저 끝낸 학생이 이어서 풀어요.</span></div>
     <div class="field"><span>난이도</span><div class="seg" id="lv">${Object.entries(LEVELS).map(([k, v]) => `<button data-v="${k}" aria-pressed="${k === setup.level}">${v.name} <span class="dim">${v.note}</span></button>`).join('')}</div></div>
-    <div class="field"><span>그림</span><div class="pic"><img src="${thumb(pic)}" alt=""><span>${esc(pic.name)}</span></div>
-      <span class="dim" style="font-size:16px">지금은 그림이 하나예요. 30조각보다 작게 고르면 이 그림을 잘라서 써요.</span></div>
+    <div class="field"><span>그림</span><div class="pics" id="pics" role="radiogroup" aria-label="그림"></div>
+      <span class="dim" style="font-size:16px">30조각보다 작게 고르면 그림의 가운데를 잘라서 써요.</span></div>
     <div class="row"><button class="btn" id="create">방 만들기</button><button class="btn ghost" id="back">처음으로</button><span class="err" id="err"></span></div>
     ${modeNotice()}
   </div>`;
@@ -48,6 +47,12 @@ export function openSetup() {
     document.querySelectorAll('#sizes button').forEach((b) => (b.onclick = () => { setup.pieces = +b.dataset.n; drawSizes(); }));
   };
   drawSizes();
+  const pics = document.getElementById('pics');
+  pics.innerHTML = PICTURES.map((p) => `<button class="pick-pic${p.id === setup.picture ? ' on' : ''}" role="radio" aria-checked="${p.id === setup.picture}" data-id="${esc(p.id)}"><img src="${thumb(p)}" alt=""><span>${esc(p.name)}</span></button>`).join('');
+  pics.querySelectorAll('button').forEach((b) => (b.onclick = () => {
+    setup.picture = b.dataset.id;
+    pics.querySelectorAll('button').forEach((x) => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', on); });
+  }));
   document.querySelectorAll('#lv button').forEach((b) => (b.onclick = () => { setup.level = b.dataset.v; document.querySelectorAll('#lv button').forEach((x) => x.setAttribute('aria-pressed', x === b)); }));
   document.getElementById('back').onclick = () => { location.href = location.pathname; };
   document.getElementById('create').onclick = createRoom;
@@ -97,7 +102,8 @@ function bindTop() {
   const tk = document.getElementById('takeHost');
   if (tk) tk.onclick = () => { try { localStorage.setItem(hostKey(code), '1'); } catch (_) {} isHost = true; view = ''; hostTick(); schedule(); };
 }
-const hostNote = () => isHost ? '' : `<div class="notice">이 칠판은 보기만 하고 있어요. 방을 만든 칠판이 꺼졌다면 <button class="btn small" id="takeHost">이 칠판으로 진행하기</button></div>`;
+const hostNote = () => isHost ? '' : `<div class="notice"><b>선생님 화면</b> · 보면서 학생을 도울 수 있어요. 조각 배정은 방을 만든 칠판이 맡아요. 그 칠판이 꺼졌을 때만 <button class="btn small" id="takeHost">이 화면으로 진행하기</button></div>`;
+const teacherUrl = () => { const u = new URL(location.href); u.search = '?board=' + code; u.hash = ''; return u.toString(); };
 
 function render() {
   if (!R || !R.meta) return;
@@ -127,6 +133,7 @@ function renderLobby() {
         <div class="names" id="names"></div>
         <span class="dim" id="note" style="font-size:17px"></span>
         <div class="row"><button class="btn" id="startBtn">시작하기</button><button class="btn ghost small" id="newRoom">새 방 만들기</button></div>
+        <div class="notice">선생님 폰이나 노트북으로 따로 보며 학생을 도우려면 이 주소를 여세요. 반 친구들 앞에 학생 판을 크게 띄우지 않아도 돼요.<br><span style="color:var(--fg);word-break:break-all">${esc(teacherUrl())}</span></div>
         ${hostNote()}
       </div>
     </div>${modeNotice()}`;
@@ -219,7 +226,7 @@ function renderPlay() {
       <div class="chip">접속 <span class="px" id="online" style="font-size:12px;color:var(--green)">0</span>명</div>${fullBtn()}</div></div>
     <div class="stage">
       <div class="board-col">
-        <div class="board-cap"><span>칠한 칸이 바로 나타나요</span><span>시작하고 <span class="px" id="clock" style="font-size:11px;color:var(--yellow)">00:00</span></span></div>
+        <div class="board-cap"><span>칠한 칸이 바로 나타나요 · 조각을 누르면 학생을 도울 수 있어요</span><span>시작하고 <span class="px" id="clock" style="font-size:11px;color:var(--yellow)">00:00</span></span></div>
         <div class="board-box" id="boardBox" style="max-width:calc((100vh - 140px) * ${(built.w + 10) / (built.h + 10)})"><canvas id="board"></canvas><div class="tiles" id="tiles"></div></div>
       </div>
       <aside class="side">
@@ -231,9 +238,13 @@ function renderPlay() {
       </aside>
     </div>`;
     bindTop();
+    const tl = document.getElementById('tiles');
+    tl.addEventListener('click', (e) => { const t = e.target.closest('[data-id]'); if (t) openPanel(+t.dataset.id); });
+    tl.addEventListener('keydown', (e) => { const t = e.target.closest('[data-id]'); if (t && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openPanel(+t.dataset.id); } });
   }
   const d = boardData();
   drawPicture(document.getElementById('board'), d);
+  refreshPanel();
   // 방금 완성된 조각 반짝임
   if (doneSeen) for (const p of built.pieces) if (d.done[p.id] && !doneSeen[p.id]) { lastDoneId = p.id; lastDoneAt = performance.now(); }
   doneSeen = d.done;
@@ -246,7 +257,7 @@ function renderPlay() {
     const o = rec.owner && S[rec.owner];
     const hs = Object.keys(rec.helpers || {}).length;
     const tag = rec.request && !hs ? '<span class="tag req">도와줘!</span>' : hs ? `<span class="tag help">+${hs}</span>` : '';
-    return `<div class="tile${o ? '' : ' empty'}">${tag}<span class="lab">${p.label}</span><div><span class="who">${o ? esc(o.name) : '남은 조각'}</span><div class="bar"><i style="width:${Math.round(progressOf(p) * 100)}%"></i></div></div></div>`;
+    return `<div class="tile${o ? ' pick' : ' empty'}"${o ? ` data-id="${p.id}" role="button" tabindex="0" aria-label="${esc(o.name)}의 ${p.label} 조각 보기"` : ''}>${tag}<span class="lab">${p.label}</span><div><span class="who">${o ? esc(o.name) : '남은 조각'}</span><div class="bar"><i style="width:${Math.round(progressOf(p) * 100)}%"></i></div></div></div>`;
   }).join('');
   const done = built.pieces.filter((p) => d.done[p.id]).length;
   document.getElementById('doneBig').innerHTML = `${done} <small>/ ${N}</small>`;
@@ -319,4 +330,69 @@ function saveImage() {
     a.download = `우리반-협동화-${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, '0')}${String(dt.getDate()).padStart(2, '0')}.png`;
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }, 'image/png');
+}
+
+// ───── 선생님이 학생 직접 돕기: 조각을 누르면 열림 ─────
+let panelId = null, panelGrid = null, panelWrong = false, panelCool = 0, panelSig = '';
+function openPanel(id) {
+  panelId = id; panelWrong = false; panelSig = '';
+  let el = document.getElementById('panel');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'panel'; el.className = 'overlay';
+    el.addEventListener('click', (e) => { if (e.target === el) closePanel(); });
+    document.body.appendChild(el);
+  }
+  el.hidden = false;
+  refreshPanel(true);
+}
+function closePanel() { panelId = null; panelGrid = null; const el = document.getElementById('panel'); if (el) el.hidden = true; }
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && panelId != null) closePanel(); });
+function wrongSet(p) {
+  const st = cellsOf(p.id), w = new Set();
+  for (let i = 0; i < 100; i++) if (st[i] === '1' && !p.sol[i / 10 | 0][i % 10]) w.add(i);
+  return w;
+}
+function refreshPanel(force) {
+  if (panelId == null || !R || !built) return;
+  const el = document.getElementById('panel'); if (!el) return;
+  const p = built.pieces[panelId], rec = pieceRec(p.id), S = R.students || {};
+  const o = rec.owner && S[rec.owner];
+  const hs = Object.values(rec.helpers || {});
+  const left = CHECKS_PER_PIECE + (rec.bonus || 0) - (rec.checks || 0);
+  const w = wrongSet(p);
+  const sig = [rec.done, rec.owner, hs.join(), left, panelWrong, panelCool > Date.now(), w.size, Math.round(progressOf(p) * 20), !!rec.request, o && o.online].join('|');
+  if (!force && sig === panelSig && panelGrid) { panelGrid.refresh(); return; }
+  panelSig = sig;
+  if (rec.done || !o) {
+    el.innerHTML = `<div class="sheet"><h2>${p.label} 조각</h2><p>${rec.done ? '이 조각은 완성됐어요.' : '지금은 맡은 학생이 없어요.'}</p><div class="row"><button class="btn" id="pClose">닫기</button></div></div>`;
+    panelGrid = null; document.getElementById('pClose').onclick = closePanel; return;
+  }
+  el.innerHTML = `<div class="sheet">
+    <div class="row" style="justify-content:space-between"><h2>${esc(o.name)}의 <span class="px" style="font-size:20px">${p.label}</span></h2><button class="btn ghost small" id="pClose">닫기</button></div>
+    <p>${Math.round(progressOf(p) * 100)}% 칠함 · 검사하기 ${left > 0 ? left + '번 남음' : '다 씀'}${hs.length ? ' · 돕는 친구 ' + hs.map(esc).join(', ') : ''}${rec.request ? ' · <span style="color:var(--pink)">도와줘!</span>' : ''}${o.online === false ? ' · 접속 끊김' : ''}</p>
+    <div class="grid-host" id="pGrid"></div>
+    <div class="msg ${panelCool > Date.now() ? '' : 'hi'}">${panelCool > Date.now() ? '학생 화면에 그 줄이 반짝였어요' : '숫자를 누르면 학생 화면에 그 줄이 반짝여요'}</div>
+    <div class="row">
+      <button class="btn ghost small" id="pWrong" aria-pressed="${panelWrong}">${panelWrong ? '틀린 칸 숨기기' : `틀린 칸 보기 (${w.size})`}</button>
+      <button class="btn small pink" id="pReveal" ${w.size ? '' : 'disabled'}>학생에게 틀린 칸 보여 주기</button>
+      <button class="btn small yellow" id="pBonus">검사하기 1번 더 주기</button>
+    </div>
+    <span class="dim" style="font-size:15px">틀린 칸 보기는 이 화면에만 보여요. 칠판이 반 전체에 보인다면 선생님 폰에서 여세요.</span>
+  </div>`;
+  panelGrid = buildGrid(document.getElementById('pGrid'), {
+    sol: p.sol, editable: false, cls: 'watch',
+    get: (r, c) => +(cellsOf(p.id)[r * 10 + c] || 0),
+    wrong: () => (panelWrong ? wrongSet(p) : null),
+    hl: () => { const h = (R.hl || {})['p' + p.id]; return h && Date.now() - h.at < 5000 ? h : null; },
+    onHint: (type, i) => {
+      if (panelCool > Date.now()) return;
+      panelCool = Date.now() + 3000;
+      net.set(`rooms/${code}/hl/p${p.id}`, { type, i, by: 'teacher', name: '선생님', at: Date.now() });
+      refreshPanel(true); setTimeout(() => refreshPanel(true), 3100);
+    },
+  });
+  document.getElementById('pClose').onclick = closePanel;
+  document.getElementById('pWrong').onclick = () => { panelWrong = !panelWrong; refreshPanel(true); };
+  document.getElementById('pReveal').onclick = () => { net.set(`rooms/${code}/pieces/p${p.id}/reveal`, Date.now()); toast(`${o.name} 화면에 틀린 칸을 보여 줬어요`); };
+  document.getElementById('pBonus').onclick = () => { net.set(`rooms/${code}/pieces/p${p.id}/bonus`, (rec.bonus || 0) + 1); toast(`${o.name}에게 검사하기를 1번 더 줬어요`); };
 }

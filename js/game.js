@@ -26,13 +26,14 @@ export function buildPieces(meta) {
   const L = layoutOf(meta.pieces);
   const pic = pictureOf(meta.picture);
   const rows = pic.levels[meta.level] || pic.levels.normal;
+  const [ox, oy] = (pic.crop && pic.crop[meta.pieces]) || [L.ox, L.oy];
   const out = [];
   for (let r = 0; r < L.r; r++) for (let c = 0; c < L.c; c++) {
     const sol = [], ch = [];
     for (let y = 0; y < 10; y++) {
       sol.push([]); ch.push([]);
       for (let x = 0; x < 10; x++) {
-        const k = rows[(r + L.oy) * 10 + y][(c + L.ox) * 10 + x];
+        const k = rows[(r + oy) * 10 + y][(c + ox) * 10 + x];
         sol[y].push(k === k.toUpperCase() ? 1 : 0);
         ch[y].push(k);
       }

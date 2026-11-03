@@ -75,8 +75,11 @@ input.codein{font-family:var(--px);font-size:24px;letter-spacing:8px;width:200px
 .size .mg{display:grid;gap:2px}
 .size .mg i{width:8px;height:8px;background:var(--line2);display:block}
 .size.on .mg i{background:var(--yellow)}
-.pic{display:flex;align-items:center;gap:12px;border:3px solid var(--green);padding:10px 12px;font-size:19px}
-.pic img{width:72px;image-rendering:pixelated;border:2px solid var(--line2)}
+.pics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.pick-pic{border:3px solid var(--line2);background:transparent;color:var(--fg);padding:6px;display:flex;flex-direction:column;gap:6px;align-items:stretch;text-align:left;font-size:17px}
+.pick-pic img{width:100%;height:auto;image-rendering:pixelated;display:block}
+.pick-pic.on{border-color:var(--green)}
+.pick-pic.on span{color:var(--green)}
 
 /* 대기실 */
 .lobby{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:20px;align-items:start}
@@ -124,6 +127,12 @@ input.codein{font-family:var(--px);font-size:24px;letter-spacing:8px;width:200px
 .log li{display:block;line-height:1.35}
 .log li b{font-weight:normal;color:var(--fg)}
 
+/* 선생님 돕기 창 */
+.overlay{position:fixed;inset:0;z-index:20;background:rgba(6,9,18,.88);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:calc(24px + env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) 24px max(16px,env(safe-area-inset-left,0px))}
+.overlay .sheet{width:min(640px,100%)}
+.tile.pick{cursor:pointer}
+.tile.pick:hover,.tile.pick:focus-visible{border:2px solid var(--blue);outline:none}
+
 /* 완성 */
 .result{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
 .result h2{margin:0;font-weight:normal;font-size:34px;color:var(--green)}
@@ -151,6 +160,8 @@ input.codein{font-family:var(--px);font-size:24px;letter-spacing:8px;width:200px
 .tool{height:56px;border:3px solid var(--line2);background:transparent;font-size:22px;color:var(--dim)}
 .tool[aria-pressed="true"]{background:var(--fg);border-color:var(--fg);color:var(--ink)}
 .subtools{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.subtools.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.subtools .btn{padding-left:6px;padding-right:6px}
 .banner{border:3px solid var(--blue);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:18px;color:var(--blue)}
 .banner.pink{border-color:var(--pink);color:var(--pink)}
 .banner .btn{flex:none}
@@ -190,7 +201,7 @@ input.codein{font-family:var(--px);font-size:24px;letter-spacing:8px;width:200px
 }
 @media (max-width:600px){
   .choices{grid-template-columns:1fr}
-  .sizes{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sizes,.pics{grid-template-columns:repeat(2,minmax(0,1fr))}
   .brand h1{font-size:24px}
 }
 @media (prefers-reduced-motion:reduce){.tile.flash{animation:none}}
