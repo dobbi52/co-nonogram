@@ -1,0 +1,322 @@
+// 전자칠판(선생님) 화면: 방 만들기 → 대기실 → 함께 푸는 칠판 → 완성
+// 칠판 화면은 "진행 맡은 칠판"으로서 조각 배정, 자리 비운 학생 정리, 완성 판정을 맡는다.
+import * as net from './net.js';
+import { app, brand, modeNotice, toast, go, joinUrl } from './ui.js';
+import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorSlots, esc, shuffle, EMPTY, MAX_HELPERS } from './game.js';
+
+const OFFLINE_RELEASE_MS = 45000; // 조각을 맡은 학생이 이만큼 접속이 끊기면 조각을 다른 학생에게 넘긴다
+const setup = { pieces: 25, level: 'normal', picture: PICTURES[0].id };
+let code = null, R = null, built = null, slots = [], isHost = false, unsub = null, view = '', timer = 0, raf = 0;
+let showNames = false, lastPatch = '', lastPatchAt = 0, lastDoneId = null, lastDoneAt = 0, doneSeen = null;
+const hostKey = (c) => 'cono-host-' + c;
+
+const sorted = (obj) => Object.entries(obj || {}).sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0));
+const pieceRec = (id) => (R.pieces || {})['p' + id] || {};
+const cellsOf = (id) => (R.cells || {})['p' + id] || EMPTY;
+function progressOf(p) {
+  const rec = pieceRec(p.id); if (rec.done) return 1;
+  const st = cellsOf(p.id); let k = 0;
+  for (let i = 0; i < 100; i++) if (st[i] === '1' && p.sol[i / 10 | 0][i % 10]) k++;
+  return p.fills ? k / p.fills : 0;
+}
+
+// ───── 방 만들기 ─────
+function thumb(pic) {
+  const cv = document.createElement('canvas'); cv.width = pic.w; cv.height = pic.h;
+  const x = cv.getContext('2d'); const rows = pic.levels.normal;
+  for (let y = 0; y < pic.h; y++) for (let xx = 0; xx < pic.w; xx++) { x.fillStyle = pic.pal[rows[y][xx]]; x.fillRect(xx, y, 1, 1); }
+  return cv.toDataURL();
+}
+export function openSetup() {
+  go(null);
+  document.title = '방 만들기 · 협동 노노그램';
+  const pic = PICTURES.find((p) => p.id === setup.picture);
+  app.innerHTML = `<div class="top">${brand('NEW ROOM')}</div>
+  <div class="sheet">
+    <h2>방 만들기</h2>
+    <p>조각 수와 난이도를 고르면 방이 만들어져요. 전자칠판에 코드가 나오면 학생들이 들어와요.</p>
+    <div class="field"><span>조각 수</span><div class="sizes" id="sizes" role="radiogroup" aria-label="조각 수"></div>
+      <span class="dim" style="font-size:16px">학생이 조각보다 많으면 남는 학생은 처음부터 친구 돕기와 꾸미기를 해요. 조각이 남으면 먼저 끝낸 학생이 이어서 풀어요.</span></div>
+    <div class="field"><span>난이도</span><div class="seg" id="lv">${Object.entries(LEVELS).map(([k, v]) => `<button data-v="${k}" aria-pressed="${k === setup.level}">${v.name} <span class="dim">${v.note}</span></button>`).join('')}</div></div>
+    <div class="field"><span>그림</span><div class="pic"><img src="${thumb(pic)}" alt=""><span>${esc(pic.name)}</span></div>
+      <span class="dim" style="font-size:16px">지금은 그림이 하나예요. 30조각보다 작게 고르면 이 그림을 잘라서 써요.</span></div>
+    <div class="row"><button class="btn" id="create">방 만들기</button><button class="btn ghost" id="back">처음으로</button><span class="err" id="err"></span></div>
+    ${modeNotice()}
+  </div>`;
+  const drawSizes = () => {
+    document.getElementById('sizes').innerHTML = LAYOUTS.map((l) => `<button class="size${l.n === setup.pieces ? ' on' : ''}" role="radio" aria-checked="${l.n === setup.pieces}" data-n="${l.n}"><span class="px">${l.c}×${l.r}</span><b>${l.n}조각</b><div class="mg" style="grid-template-columns:repeat(${l.c},8px)">${'<i></i>'.repeat(l.n)}</div><span class="dim" style="font-size:15px">${l.c * 10}×${l.r * 10}칸</span></button>`).join('');
+    document.querySelectorAll('#sizes button').forEach((b) => (b.onclick = () => { setup.pieces = +b.dataset.n; drawSizes(); }));
+  };
+  drawSizes();
+  document.querySelectorAll('#lv button').forEach((b) => (b.onclick = () => { setup.level = b.dataset.v; document.querySelectorAll('#lv button').forEach((x) => x.setAttribute('aria-pressed', x === b)); }));
+  document.getElementById('back').onclick = () => { location.href = location.pathname; };
+  document.getElementById('create').onclick = createRoom;
+}
+async function createRoom() {
+  const btn = document.getElementById('create'); btn.disabled = true;
+  try {
+    let c = null;
+    for (let i = 0; i < 25 && !c; i++) {
+      const t = String(1000 + Math.floor(Math.random() * 9000));
+      const m = await net.get(`rooms/${t}/meta`);
+      const old = m && (Date.now() - (m.createdAt || 0) > 12 * 3600e3 || (m.status === 'done' && Date.now() - (m.endedAt || 0) > 3600e3));
+      if (!m || old) c = t;
+    }
+    if (!c) throw new Error('no code');
+    await net.set(`rooms/${c}`, { meta: { code: c, pieces: setup.pieces, level: setup.level, picture: setup.picture, status: 'lobby', createdAt: Date.now() } });
+    try { localStorage.setItem(hostKey(c), '1'); } catch (_) {}
+    openBoard(c);
+  } catch (e) {
+    console.error(e); btn.disabled = false;
+    document.getElementById('err').textContent = '방을 만들지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.';
+  }
+}
+
+// ───── 칠판 열기 ─────
+export function openBoard(c) {
+  code = c; go({ board: c }); view = '';
+  try { isHost = localStorage.getItem(hostKey(c)) === '1'; } catch (_) { isHost = false; }
+  if (unsub) unsub();
+  unsub = net.on(`rooms/${c}`, (room) => {
+    R = room;
+    if (!R || !R.meta) { app.innerHTML = `<div class="sheet"><h2>방을 찾을 수 없어요</h2><p>코드 ${esc(c)}로 만든 방이 없어요.</p><div class="row"><button class="btn" onclick="location.href=location.pathname">처음으로</button></div></div>`; return; }
+    if (!built || built.key !== R.meta.pieces + R.meta.level + R.meta.picture) {
+      built = buildPieces(R.meta); built.key = R.meta.pieces + R.meta.level + R.meta.picture; slots = decorSlots(built.w, built.h, c);
+    }
+    hostTick(); schedule();
+  });
+  clearInterval(timer);
+  timer = setInterval(() => { if (R && R.meta) { hostTick(); const el = document.getElementById('clock'); if (el && R.meta.startedAt) el.textContent = clock(); } }, 3000);
+}
+function schedule() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; render(); }); }
+const clock = () => { const t = Math.max(0, Math.floor(((R.meta.endedAt || Date.now()) - R.meta.startedAt) / 1000)); return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); };
+const fullBtn = () => `<button class="chip" id="full">전체 화면</button>`;
+function bindTop() {
+  const f = document.getElementById('full');
+  if (f) f.onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.().catch(() => {}); };
+  const tk = document.getElementById('takeHost');
+  if (tk) tk.onclick = () => { try { localStorage.setItem(hostKey(code), '1'); } catch (_) {} isHost = true; view = ''; hostTick(); schedule(); };
+}
+const hostNote = () => isHost ? '' : `<div class="notice">이 칠판은 보기만 하고 있어요. 방을 만든 칠판이 꺼졌다면 <button class="btn small" id="takeHost">이 칠판으로 진행하기</button></div>`;
+
+function render() {
+  if (!R || !R.meta) return;
+  const st = R.meta.status;
+  if (st === 'lobby') renderLobby();
+  else if (st === 'play') renderPlay();
+  else renderResult();
+}
+
+// ───── 대기실 ─────
+function renderLobby() {
+  document.title = `코드 ${code} · 협동 노노그램`;
+  const L = built.L, url = joinUrl(code);
+  if (view !== 'lobby') {
+    view = 'lobby';
+    app.innerHTML = `<div class="top">${brand('WAITING ROOM')}<div class="chips"><div class="chip size">${L.n}조각 · ${LEVELS[R.meta.level].name}</div>${fullBtn()}</div></div>
+    <div class="lobby">
+      <div class="join">
+        <span style="font-size:22px">코드</span>
+        <div class="big-code">${esc(code)}</div>
+        <div class="qr" id="qr"></div>
+        <div class="url">${esc(url)}</div>
+        <span class="dim" style="font-size:17px;line-height:1.45">QR을 찍거나 주소로 들어와요. 첫 화면에서 학생을 누르고 코드를 넣어도 돼요.</span>
+      </div>
+      <div class="card">
+        <h2>들어온 학생 <span class="px" id="cnt" style="font-size:13px;color:var(--green)">0</span></h2>
+        <div class="names" id="names"></div>
+        <span class="dim" id="note" style="font-size:17px"></span>
+        <div class="row"><button class="btn" id="startBtn">시작하기</button><button class="btn ghost small" id="newRoom">새 방 만들기</button></div>
+        ${hostNote()}
+      </div>
+    </div>${modeNotice()}`;
+    const q = document.getElementById('qr');
+    try { if (window.qrcode) { const qr = window.qrcode(0, 'M'); qr.addData(url); qr.make(); q.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); } } catch (_) {}
+    document.getElementById('startBtn').onclick = startGame;
+    document.getElementById('newRoom').onclick = () => { location.href = location.pathname; };
+    bindTop();
+    if (!window.qrcode) setTimeout(() => { if (view === 'lobby') { view = ''; schedule(); } }, 1200);
+  }
+  const ss = sorted(R.students);
+  document.getElementById('cnt').textContent = ss.length;
+  document.getElementById('names').innerHTML = ss.length ? ss.map(([, s]) => `<span class="${s.online === false ? 'off' : ''}">${esc(s.name)}</span>`).join('') : '<span class="dim" style="border:none;padding:0">아직 아무도 없어요</span>';
+  const n = ss.length;
+  document.getElementById('note').textContent = n === 0 ? '학생이 들어오면 시작할 수 있어요.'
+    : n > L.n ? `조각보다 ${n - L.n}명 많아요. 남는 학생은 처음부터 친구 돕기와 꾸미기를 해요.`
+    : n < L.n ? `조각이 ${L.n - n}개 남아요. 먼저 끝낸 학생이 이어서 풀어요.` : '학생과 조각 수가 딱 맞아요.';
+  const sb = document.getElementById('startBtn'); sb.disabled = n === 0 || !isHost;
+}
+function startGame() {
+  if (!isHost) return;
+  net.update({ [`rooms/${code}/meta/status`]: 'play', [`rooms/${code}/meta/startedAt`]: Date.now() });
+  net.push(`rooms/${code}/log`, { who: '', what: '시작!', at: Date.now() });
+}
+
+// ───── 진행 맡은 칠판이 하는 일 ─────
+function hostTick() {
+  if (!isHost || !R || !R.meta || R.meta.status !== 'play' || !built) return;
+  const S = R.students || {}, PC = R.pieces || {}, now = Date.now(), patch = {};
+  const P = built.pieces;
+  const rec = (id) => PC['p' + id] || {};
+  // 주인 정리: 학생 쪽 기록과 맞지 않으면 주인 없음으로
+  for (const p of P) {
+    const o = rec(p.id).owner;
+    if (o && !rec(p.id).done && (!S[o] || S[o].piece !== p.id)) patch[`pieces/p${p.id}/owner`] = null;
+  }
+  const taken = new Set(P.filter((p) => rec(p.id).done || (rec(p.id).owner && !(`pieces/p${p.id}/owner` in patch))).map((p) => p.id));
+  const free = shuffle(P.filter((p) => !taken.has(p.id)).map((p) => p.id));
+  const give = (sid, id) => {
+    patch[`pieces/p${id}/owner`] = sid;
+    patch[`students/${sid}/piece`] = id; patch[`students/${sid}/mode`] = 'solve';
+    patch[`students/${sid}/want`] = null; patch[`students/${sid}/helpTarget`] = null;
+  };
+  for (const [sid, s] of sorted(S)) {
+    // 자리를 오래 비운 학생의 조각은 다른 학생이 이어서 풀 수 있게 풀어 둔다 (칠한 칸은 그대로 남음)
+    if (s.piece != null && s.online === false && now - (s.offAt || 0) > OFFLINE_RELEASE_MS && !rec(s.piece).done) {
+      patch[`pieces/p${s.piece}/owner`] = null; patch[`students/${sid}/piece`] = null; patch[`students/${sid}/mode`] = 'free';
+      continue;
+    }
+    if (s.mode === 'wait' || (s.want && s.piece == null)) {
+      if (free.length) give(sid, free.shift());
+      else { patch[`students/${sid}/mode`] = s.mode === 'wait' ? 'free' : s.mode; patch[`students/${sid}/want`] = null; }
+    }
+    // 돕던 조각이 끝났으면 자유 상태로
+    if (s.mode === 'help' && (s.helpTarget == null || rec(s.helpTarget).done || !rec(s.helpTarget).owner)) {
+      patch[`students/${sid}/mode`] = 'free'; patch[`students/${sid}/helpTarget`] = null;
+    }
+  }
+  for (const p of P) {
+    const hs = rec(p.id).helpers || {};
+    for (const hid of Object.keys(hs)) {
+      const h = S[hid];
+      if (rec(p.id).done || !h || h.mode !== 'help' || h.helpTarget !== p.id) patch[`pieces/p${p.id}/helpers/${hid}`] = null;
+    }
+  }
+  if (P.every((p) => rec(p.id).done)) { patch['meta/status'] = 'done'; patch['meta/endedAt'] = now; }
+  const keys = Object.keys(patch);
+  if (!keys.length) return;
+  const sig = JSON.stringify(patch);
+  if (sig === lastPatch && now - lastPatchAt < 2500) return;
+  lastPatch = sig; lastPatchAt = now;
+  const full = {}; for (const k of keys) full[`rooms/${code}/${k}`] = patch[k];
+  net.update(full);
+}
+
+// ───── 함께 푸는 칠판 ─────
+function boardData() {
+  const done = {}, cells = {};
+  for (const p of built.pieces) { done[p.id] = !!pieceRec(p.id).done; cells[p.id] = cellsOf(p.id); }
+  const decor = Object.entries(R.decor || {}).sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([, d]) => d);
+  return { built, done, cells, decor, slots };
+}
+function renderPlay() {
+  document.title = `코드 ${code} · 협동 노노그램`;
+  const L = built.L, N = built.pieces.length;
+  if (view !== 'play') {
+    view = 'play';
+    app.innerHTML = `<div class="top">${brand('PIXEL NONOGRAM')}<div class="chips">
+      <div class="chip code">CODE <b>${esc(code)}</b></div><div class="chip size">${L.n}조각 · ${LEVELS[R.meta.level].name}</div>
+      <div class="chip">접속 <span class="px" id="online" style="font-size:12px;color:var(--green)">0</span>명</div>${fullBtn()}</div></div>
+    <div class="stage">
+      <div class="board-col">
+        <div class="board-cap"><span>칠한 칸이 바로 나타나요</span><span>시작하고 <span class="px" id="clock" style="font-size:11px;color:var(--yellow)">00:00</span></span></div>
+        <div class="board-box" id="boardBox" style="max-width:calc((100vh - 140px) * ${(built.w + 10) / (built.h + 10)})"><canvas id="board"></canvas><div class="tiles" id="tiles"></div></div>
+      </div>
+      <aside class="side">
+        <div class="card"><h2>완성한 조각</h2><div class="big" id="doneBig"></div><div class="meter"><i id="doneBar"></i></div></div>
+        <div class="card"><h2>도와줘!</h2><ul class="list" id="reqList"></ul></div>
+        <div class="card"><h2>지금 하는 일</h2><ul class="list" id="actList"></ul></div>
+        <div class="card"><h2>기록</h2><ul class="list log" id="logList"></ul></div>
+        ${hostNote()}
+      </aside>
+    </div>`;
+    bindTop();
+  }
+  const d = boardData();
+  drawPicture(document.getElementById('board'), d);
+  // 방금 완성된 조각 반짝임
+  if (doneSeen) for (const p of built.pieces) if (d.done[p.id] && !doneSeen[p.id]) { lastDoneId = p.id; lastDoneAt = performance.now(); }
+  doneSeen = d.done;
+  const flash = lastDoneId != null && performance.now() - lastDoneAt < 4000;
+  const S = R.students || {};
+  const tiles = document.getElementById('tiles'); placeTiles(tiles, built);
+  tiles.innerHTML = built.pieces.map((p) => {
+    const rec = pieceRec(p.id);
+    if (rec.done) return `<div class="tile open${flash && lastDoneId === p.id ? ' flash' : ''}"></div>`;
+    const o = rec.owner && S[rec.owner];
+    const hs = Object.keys(rec.helpers || {}).length;
+    const tag = rec.request && !hs ? '<span class="tag req">도와줘!</span>' : hs ? `<span class="tag help">+${hs}</span>` : '';
+    return `<div class="tile${o ? '' : ' empty'}">${tag}<span class="lab">${p.label}</span><div><span class="who">${o ? esc(o.name) : '남은 조각'}</span><div class="bar"><i style="width:${Math.round(progressOf(p) * 100)}%"></i></div></div></div>`;
+  }).join('');
+  const done = built.pieces.filter((p) => d.done[p.id]).length;
+  document.getElementById('doneBig').innerHTML = `${done} <small>/ ${N}</small>`;
+  document.getElementById('doneBar').style.width = (done / N * 100) + '%';
+  document.getElementById('online').textContent = Object.values(S).filter((s) => s.online !== false).length;
+  document.getElementById('clock').textContent = clock();
+  const reqs = built.pieces.filter((p) => pieceRec(p.id).request && !pieceRec(p.id).done && pieceRec(p.id).owner);
+  document.getElementById('reqList').innerHTML = reqs.length ? reqs.map((p) => {
+    const o = S[pieceRec(p.id).owner]; const hs = Object.keys(pieceRec(p.id).helpers || {}).length;
+    return `<li class="req-item"><span>${esc(o ? o.name : '')}</span><span class="px">${p.label}${hs ? ' · 도움 받는 중' : ''}</span></li>`;
+  }).join('') : '<li class="dim">아직 없어요</li>';
+  const c = { solve: 0, help: 0, decor: 0, free: 0 };
+  for (const s of Object.values(S)) if (s.mode in c) c[s.mode]++;
+  document.getElementById('actList').innerHTML = `<li><span>조각 푸는 중</span><span class="px">${c.solve}</span></li><li><span>친구 돕는 중</span><span class="px">${c.help}</span></li><li><span>꾸미기 중</span><span class="px">${c.decor}</span></li><li><span>고르는 중</span><span class="px">${c.free}</span></li><li><span>붙은 장식</span><span class="px">${d.decor.length}</span></li>`;
+  const logs = Object.entries(R.log || {}).sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 6);
+  document.getElementById('logList').innerHTML = logs.map(([, l]) => `<li>${l.who ? `<b>${esc(l.who)}</b> ` : ''}${esc(l.what)}</li>`).join('');
+}
+
+// ───── 완성 ─────
+function renderResult() {
+  document.title = '완성! · 협동 노노그램';
+  if (view !== 'done') {
+    view = 'done'; showNames = false;
+    app.innerHTML = `<div class="result">
+      <div class="top">${brand('COMPLETE')}<div class="chips"><div class="chip">걸린 시간 <span class="px" style="font-size:12px;color:var(--yellow)">${R.meta.startedAt ? clock() : '-'}</span></div>${fullBtn()}</div></div>
+      <h2>우리 반 협동화 완성!</h2>
+      <div class="board-box"><canvas id="resCanvas"></canvas><div class="tiles" id="resTiles"></div></div>
+      <div class="row"><button class="btn ghost small" id="names" aria-pressed="false">칠한 사람 보기</button><button class="btn small yellow" id="save">이미지 내려받기</button><button class="btn small" id="newRoom">새 방 만들기</button></div>
+      <h2 style="font-size:24px;color:var(--fg)">함께한 친구들</h2>
+      <div class="credits" id="credits"></div>
+    </div>`;
+    bindTop();
+    document.getElementById('names').onclick = (e) => { showNames = !showNames; e.currentTarget.setAttribute('aria-pressed', showNames); e.currentTarget.textContent = showNames ? '그림만 보기' : '칠한 사람 보기'; paintNames(); };
+    document.getElementById('save').onclick = saveImage;
+    document.getElementById('newRoom').onclick = () => { location.href = location.pathname; };
+  }
+  const d = boardData();
+  drawPicture(document.getElementById('resCanvas'), { ...d, all: true });
+  paintNames();
+  document.getElementById('credits').innerHTML = sorted(R.students).map(([, s]) => {
+    const bits = []; if (s.helps) bits.push(`도움 ${s.helps}번`); if (s.decor) bits.push(`장식 ${s.decor}개`);
+    const ps = Object.values(s.done || {});
+    return `<div class="credit"><b>${esc(s.name)}</b><span>${ps.length ? ps.map(esc).join(', ') : '조각 없음'}</span>${bits.length ? `<em>${bits.join(' · ')}</em>` : ''}</div>`;
+  }).join('');
+}
+function paintNames() {
+  const el = document.getElementById('resTiles'); placeTiles(el, built);
+  el.innerHTML = built.pieces.map((p) => showNames ? `<div class="tile names"><span>${esc(pieceRec(p.id).by || '')}</span></div>` : '<div class="tile open"></div>').join('');
+}
+function saveImage() {
+  const sc = 14, cv = document.createElement('canvas');
+  const d = boardData(); drawPicture(cv, { ...d, all: true, scale: sc });
+  const out = document.createElement('canvas'); out.width = cv.width; out.height = cv.height + 70;
+  const x = out.getContext('2d'); x.fillStyle = '#0B0F1A'; x.fillRect(0, 0, out.width, out.height); x.drawImage(cv, 0, 0);
+  if (showNames) {
+    x.font = `${Math.round(sc * 1.3)}px "Do Hyeon", sans-serif`; x.textBaseline = 'bottom';
+    for (const p of built.pieces) {
+      const t = pieceRec(p.id).by || ''; if (!t) continue;
+      const px = (5 + p.c * 10) * sc + 8, py = (5 + p.r * 10 + 10) * sc - 8, w = x.measureText(t).width;
+      x.fillStyle = 'rgba(11,15,26,.82)'; x.fillRect(px - 4, py - sc * 1.5, w + 8, sc * 1.6); x.fillStyle = '#E8ECFF'; x.fillText(t, px, py);
+    }
+  }
+  const dt = new Date();
+  x.fillStyle = '#39FF88'; x.font = '34px "Do Hyeon", sans-serif'; x.textBaseline = 'middle'; x.fillText('우리 반 협동화', 20, cv.height + 36);
+  x.fillStyle = '#8A93C2'; x.font = '20px "Do Hyeon", sans-serif'; x.textAlign = 'right';
+  x.fillText(`${Object.keys(R.students || {}).length}명 · ${built.pieces.length}조각 · ${dt.getFullYear()}.${dt.getMonth() + 1}.${dt.getDate()}`, out.width - 20, cv.height + 36);
+  out.toBlob((b) => {
+    if (!b) { toast('이미지를 만들지 못했어요'); return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(b);
+    a.download = `우리반-협동화-${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, '0')}${String(dt.getDate()).padStart(2, '0')}.png`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }, 'image/png');
+}
