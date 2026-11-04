@@ -1,8 +1,8 @@
 // 전자칠판(선생님) 화면: 방 만들기 → 대기실 → 함께 푸는 칠판 → 완성
 // 칠판 화면은 "진행 맡은 칠판"으로서 조각 배정, 자리 비운 학생 정리, 완성 판정을 맡는다.
-import * as net from './net.js';
-import { app, brand, modeNotice, toast, go, joinUrl } from './ui.js';
-import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorSlots, esc, shuffle, EMPTY, MAX_HELPERS, CHECKS_PER_PIECE, buildGrid, toGrid, fromGrid, emptyOf, PIECE_SIZES } from './game.js';
+import * as net from './net.js?v=1104-1102';
+import { app, brand, modeNotice, toast, go, joinUrl, verLine } from './ui.js?v=1104-1102';
+import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorSlots, esc, shuffle, EMPTY, MAX_HELPERS, CHECKS_PER_PIECE, buildGrid, toGrid, fromGrid, emptyOf, PIECE_SIZES } from './game.js?v=1104-1102';
 
 const OFFLINE_RELEASE_MS = 45000; // 조각을 맡은 학생이 이만큼 접속이 끊기면 조각을 다른 학생에게 넘긴다
 const setup = { pieces: 25, size: 10, picture: PICTURES[0].id };
@@ -51,7 +51,7 @@ export function openSetup() {
       <span class="dim" style="font-size:16px">30조각보다 작게 고르면 그림의 가운데를 잘라서 써요.</span></div>
     <div class="row"><button class="btn" id="create">방 만들기</button><button class="btn ghost" id="back">처음으로</button><span class="err" id="err"></span></div>
     ${modeNotice()}
-  </div>`;
+  </div>${verLine()}`;
   const drawSizes = () => {
     document.getElementById('sizes').innerHTML = LAYOUTS.map((l) => `<button class="size${l.n === setup.pieces ? ' on' : ''}" role="radio" aria-checked="${l.n === setup.pieces}" data-n="${l.n}"><span class="px">${l.c}×${l.r}</span><b>${l.n}조각</b><div class="mg" style="grid-template-columns:repeat(${l.c},8px)">${'<i></i>'.repeat(l.n)}</div><span class="dim" style="font-size:15px">${l.c * setup.size}×${l.r * setup.size}칸</span></button>`).join('');
     document.querySelectorAll('#sizes button').forEach((b) => (b.onclick = () => { setup.pieces = +b.dataset.n; drawSizes(); }));

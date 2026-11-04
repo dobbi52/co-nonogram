@@ -1,7 +1,7 @@
 // 학생 화면: 코드로 들어가기 → 기다리기 → 내 조각 풀기 / 친구 돕기 / 꾸미기 퍼즐 → 완성
-import * as net from './net.js';
-import { app, brand, modeNotice, toast, go } from './ui.js';
-import { buildPieces, josa, LEVELS, LEVEL_KEYS, decorSlots, SPRITES, esc, emptyOf, toGrid, fromGrid, isSolved, lineMatches, filledCount, buildGrid, MAX_HELPERS, CHECKS_PER_PIECE } from './game.js';
+import * as net from './net.js?v=1104-1102';
+import { app, brand, modeNotice, toast, go, verLine } from './ui.js?v=1104-1102';
+import { buildPieces, josa, LEVELS, LEVEL_KEYS, decorSlots, SPRITES, esc, emptyOf, toGrid, fromGrid, isSolved, lineMatches, filledCount, buildGrid, MAX_HELPERS, CHECKS_PER_PIECE } from './game.js?v=1104-1102';
 
 let code = null, sid = null, myName = '', myLevel = 'normal', R = null, built = null, unsub = null, raf = 0;
 let lastSig = '', gridCtl = null, tool = 1;
@@ -39,7 +39,7 @@ export function openJoin(prefill) {
     <div class="row"><button class="btn blue" type="submit" id="go">들어가기</button><button class="btn ghost" type="button" id="back">처음으로</button></div>
     <div class="err" id="err"></div>
     ${modeNotice()}
-  </form>`;
+  </form>${verLine()}`;
   const f = document.getElementById('f');
   document.getElementById('back').onclick = () => { location.href = location.pathname; };
   (prefill ? document.getElementById('name') : document.getElementById('code')).focus();

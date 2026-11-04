@@ -1,5 +1,9 @@
 // 화면 공용 도구
-import * as net from './net.js';
+import * as net from './net.js?v=1104-1102';
+import { VERSION } from './version.js?v=1104-1102';
+
+// 첫 화면·방 만들기·들어가기 아래에 판 번호를 보여 준다 (최신 판인지 확인용)
+export const verLine = () => `<p class="ver">판 ${VERSION}${net.mode === 'local' ? ' · 시험 모드' : ''}</p>`;
 
 export const app = document.getElementById('app');
 

@@ -2,10 +2,10 @@
 //   index.html            첫 화면 (선생님 / 학생 고르기)
 //   index.html?board=1234 전자칠판 (선생님)
 //   index.html?room=1234  학생 화면
-import * as net from './net.js';
-import { openSetup, openBoard } from './board.js';
-import { openJoin, openStudent } from './student.js';
-import { app, brand, modeNotice, go } from './ui.js';
+import * as net from './net.js?v=1104-1102';
+import { openSetup, openBoard } from './board.js?v=1104-1102';
+import { openJoin, openStudent } from './student.js?v=1104-1102';
+import { app, brand, modeNotice, go, verLine } from './ui.js?v=1104-1102';
 
 function home() {
   go(null);
@@ -18,6 +18,7 @@ function home() {
       <button class="choice stu" id="toStudent"><b>학생</b><span>칠판에 나온 4자리 코드를 넣고 들어가요.</span></button>
     </div>
     ${modeNotice()}
+    ${verLine()}
   </div>`;
   document.getElementById('toTeacher').onclick = openSetup;
   document.getElementById('toStudent').onclick = () => openJoin('');

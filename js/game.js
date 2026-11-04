@@ -1,5 +1,5 @@
 // 게임 규칙과 공용 도구: 조각 배치, 힌트, 풀이 검사, 꾸미기 장식, 노노그램 판
-import { PICTURES } from './pictures.js';
+import { PICTURES } from './pictures.js?v=1104-1102';
 
 export const MARGIN = 5;        // 큰 그림 둘레 장식 테두리 칸 수
 export const MAX_HELPERS = 2;   // 한 조각에 들어올 수 있는 도우미 수
