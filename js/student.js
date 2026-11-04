@@ -1,7 +1,7 @@
 // 학생 화면: 코드로 들어가기 → 기다리기 → 내 조각 풀기 / 친구 돕기 / 꾸미기 퍼즐 → 완성
 import * as net from './net.js';
 import { app, brand, modeNotice, toast, go } from './ui.js';
-import { buildPieces, josa, LEVELS, LEVEL_KEYS, decorSlots, SPRITES, esc, EMPTY, toGrid, fromGrid, isSolved, lineMatches, filledCount, buildGrid, MAX_HELPERS, CHECKS_PER_PIECE } from './game.js';
+import { buildPieces, josa, LEVELS, LEVEL_KEYS, decorSlots, SPRITES, esc, emptyOf, toGrid, fromGrid, isSolved, lineMatches, filledCount, buildGrid, MAX_HELPERS, CHECKS_PER_PIECE } from './game.js';
 
 let code = null, sid = null, myName = '', myLevel = 'normal', R = null, built = null, unsub = null, raf = 0;
 let lastSig = '', gridCtl = null, tool = 1;
@@ -13,7 +13,7 @@ const ss = { get: (k) => { try { return sessionStorage.getItem(k); } catch (_) {
 const base = () => `rooms/${code}`;
 const me = () => (R && R.students && R.students[sid]) || null;
 const pieceRec = (id) => ((R && R.pieces) || {})['p' + id] || {};
-const cellsOf = (id) => ((R && R.cells) || {})['p' + id] || EMPTY;
+const cellsOf = (id) => ((R && R.cells) || {})['p' + id] || emptyOf(built ? built.n : 10);
 const log = (what) => net.push(`${base()}/log`, { who: myName, what, at: Date.now() });
 
 // ───── 난이도 고르기 ─────
@@ -86,7 +86,7 @@ export async function openStudent(c) {
   unsub = net.on(base(), (room) => {
     R = room;
     if (R && R.meta && (!built || built.key !== R.meta.pieces + R.meta.level + R.meta.picture)) {
-      built = buildPieces(R.meta); built.key = R.meta.pieces + R.meta.level + R.meta.picture;
+      built = buildPieces(R.meta); built.key = R.meta.pieces + R.meta.level + R.meta.picture + R.meta.size;
       built.levelOf = (id) => pieceRec(id).level || R.meta.level || 'normal';
       built.slots = decorSlots(built.w, built.h, code);
     }
@@ -151,7 +151,7 @@ function bindTools() {
   if (a) a.onclick = () => { tool = 1; a.setAttribute('aria-pressed', 'true'); b.setAttribute('aria-pressed', 'false'); };
   if (b) b.onclick = () => { tool = 2; b.setAttribute('aria-pressed', 'true'); a.setAttribute('aria-pressed', 'false'); };
 }
-const progressOf = (p) => { const r = pieceRec(p.id); if (r.done) return 1; const s = cellsOf(p.id); let k = 0; for (let i = 0; i < 100; i++) if (s[i] === '1' && p.sol[i / 10 | 0][i % 10]) k++; return p.fills ? k / p.fills : 0; };
+const progressOf = (p) => { const r = pieceRec(p.id); if (r.done) return 1; const s = cellsOf(p.id); let k = 0; const n = built.n; for (let i = 0; i < n * n; i++) if (s[i] === '1' && p.sol[i / n | 0][i % n]) k++; return p.fills ? k / p.fills : 0; };
 
 function draw() {
   const m = me(), st = R.meta.status;
@@ -238,7 +238,7 @@ function drawSolve(m) {
 }
 // 틀린 칸을 잠깐 분홍으로 보여 준다 (검사하기, 또는 선생님이 보여 줄 때)
 function showWrong(p, who) {
-  const w = new Set(); for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) if (grid[r][c] === 1 && !p.sol[r][c]) w.add(r * 10 + c);
+  const n = p.sol.length, w = new Set(); for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (grid[r][c] === 1 && !p.sol[r][c]) w.add(r * n + c);
   wrong = w; wrongUntil = Date.now() + 6000;
   msgOverride = w.size ? { t: `${who}틀린 칸 ${w.size}개를 분홍으로 보여 줬어요`, c: 'bad' } : { t: `${who}틀린 칸은 없어요. 아직 덜 칠한 칸이 있어요`, c: 'ok' };
   if (gridCtl) gridCtl.refresh(); updateMsg();
@@ -249,9 +249,9 @@ function updateMsg() {
   if (!el || !m || m.mode !== 'solve' || m.piece == null || !grid) return;
   if (msgOverride) { el.className = 'msg ' + msgOverride.c; el.textContent = msgOverride.t; return; }
   const p = built.pieces[m.piece];
-  let ok = 0; for (let i = 0; i < 10; i++) { if (lineMatches(grid[i], p.sol[i])) ok++; if (lineMatches(grid.map((r) => r[i]), p.sol.map((r) => r[i]))) ok++; }
+  const n = p.sol.length; let ok = 0; for (let i = 0; i < n; i++) { if (lineMatches(grid[i], p.sol[i])) ok++; if (lineMatches(grid.map((r) => r[i]), p.sol.map((r) => r[i]))) ok++; }
   if (filledCount(grid) >= p.fills && !isSolved(p.sol, grid)) { el.className = 'msg bad'; el.textContent = '어딘가 틀렸어요. 힌트를 다시 살펴봐요'; }
-  else { el.className = 'msg'; el.textContent = `힌트가 맞은 줄 ${ok} / 20`; }
+  else { el.className = 'msg'; el.textContent = `힌트가 맞은 줄 ${ok} / ${n * 2}`; }
 }
 let pending = false;
 function queueWrite(id) {

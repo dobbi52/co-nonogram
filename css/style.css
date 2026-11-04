@@ -217,3 +217,4 @@ button.chip{cursor:pointer;color:var(--fg)}
 .lvseg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
 .lvseg button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;line-height:1.2}
 .lvseg button .dim{font-size:14px}
+.lvseg.two{grid-template-columns:repeat(2,minmax(0,1fr))}

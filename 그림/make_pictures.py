@@ -11,6 +11,7 @@ from PIL import Image
 import roof_cat as rc
 import scenes
 import scenes2
+import small
 
 P = 10
 
@@ -53,7 +54,10 @@ def main():
     os.makedirs('미리보기', exist_ok=True)
     out = []
     d = json.load(open('roof-cat.json'))
-    out.append({'id': 'roof-cat', 'name': '지붕 위 고양이', 'w': 60, 'h': 50, 'pal': d['pal'], 'levels': d['levels']})
+    ck, cf = rc.draw()
+    sm, rep_ = small.make_small(ck, cf, 0)
+    print('지붕 위 고양이 7×7', rep_, file=sys.stderr)
+    out.append({'id': 'roof-cat', 'name': '지붕 위 고양이', 'w': 60, 'h': 50, 'pal': d['pal'], 'levels': d['levels'], 'small': sm})
     save_png(d['levels']['normal'], d['pal'], '미리보기/roof-cat.png')
     for i, (sid, name, fn, crop) in enumerate(scenes.SCENES + scenes2.SCENES2):
         print(name, file=sys.stderr)
@@ -62,6 +66,8 @@ def main():
         item = {'id': sid, 'name': name, 'w': 60, 'h': 50, 'pal': pal, 'levels': lv}
         if crop:
             item['crop'] = crop
+        item['small'], rep_ = small.make_small(kind, fill, i + 1)
+        print('  7×7', rep_, file=sys.stderr)
         out.append(item)
         save_png(lv['normal'], pal, f'미리보기/{sid}.png')
     with open('../js/pictures.js', 'w', encoding='utf-8') as f:
@@ -69,6 +75,7 @@ def main():
         f.write('// 대문자는 칠하는 칸, 소문자는 비우는 칸. 글자 종류가 칠판 색을 정한다.\n')
         f.write('// levels.easy: 조각마다 3회, levels.normal: 4회, levels.hard: 5회 훑어야 풀린다.\n')
         f.write('// crop: 작은 판으로 잘라 쓸 위치(조각 단위 [가로, 세로]). 없으면 js/game.js의 기본값.\n')
+        f.write('// small: 7×7 조각용 42×35 그림. 쉬움 2회, 보통 3회, 어려움 4회.\n')
         f.write('export const PICTURES = [\n')
         for item in out:
             f.write(json.dumps(item, ensure_ascii=False, separators=(',', ':')) + ',\n')

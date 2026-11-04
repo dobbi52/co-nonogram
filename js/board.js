@@ -2,10 +2,10 @@
 // 칠판 화면은 "진행 맡은 칠판"으로서 조각 배정, 자리 비운 학생 정리, 완성 판정을 맡는다.
 import * as net from './net.js';
 import { app, brand, modeNotice, toast, go, joinUrl } from './ui.js';
-import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorSlots, esc, shuffle, EMPTY, MAX_HELPERS, CHECKS_PER_PIECE, buildGrid, toGrid, fromGrid } from './game.js';
+import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorSlots, esc, shuffle, EMPTY, MAX_HELPERS, CHECKS_PER_PIECE, buildGrid, toGrid, fromGrid, emptyOf, PIECE_SIZES } from './game.js';
 
 const OFFLINE_RELEASE_MS = 45000; // 조각을 맡은 학생이 이만큼 접속이 끊기면 조각을 다른 학생에게 넘긴다
-const setup = { pieces: 25, picture: PICTURES[0].id };
+const setup = { pieces: 25, size: 10, picture: PICTURES[0].id };
 // 방 만들기에서 그림을 묶어 보여 줄 순서
 const PICTURE_GROUPS = [
   ['동물', ['roof-cat', 'owl-forest', 'panda', 'penguin', 'octopus', 'garden']],
@@ -21,11 +21,11 @@ const hostKey = (c) => 'cono-host-' + c;
 
 const sorted = (obj) => Object.entries(obj || {}).sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0));
 const pieceRec = (id) => (R.pieces || {})['p' + id] || {};
-const cellsOf = (id) => (R.cells || {})['p' + id] || EMPTY;
+const cellsOf = (id) => (R.cells || {})['p' + id] || emptyOf(built ? built.n : 10);
 function progressOf(p) {
   const rec = pieceRec(p.id); if (rec.done) return 1;
   const st = cellsOf(p.id); let k = 0;
-  for (let i = 0; i < 100; i++) if (st[i] === '1' && p.sol[i / 10 | 0][i % 10]) k++;
+  const n = built.n; for (let i = 0; i < n * n; i++) if (st[i] === '1' && p.sol[i / n | 0][i % n]) k++;
   return p.fills ? k / p.fills : 0;
 }
 
@@ -42,7 +42,8 @@ export function openSetup() {
   app.innerHTML = `<div class="top">${brand('NEW ROOM')}</div>
   <div class="sheet">
     <h2>방 만들기</h2>
-    <p>조각 수와 난이도를 고르면 방이 만들어져요. 전자칠판에 코드가 나오면 학생들이 들어와요.</p>
+    <p>조각 크기와 수, 그림을 고르면 방이 만들어져요. 전자칠판에 코드가 나오면 학생들이 들어와요.</p>
+    <div class="field"><span>조각 크기</span><div class="seg lvseg two" id="psize" role="radiogroup" aria-label="조각 크기">${PIECE_SIZES.map((s) => `<button type="button" data-v="${s.n}" aria-pressed="${s.n === setup.size}">${s.name} <span class="dim">${s.note}</span></button>`).join('')}</div></div>
     <div class="field"><span>조각 수</span><div class="sizes" id="sizes" role="radiogroup" aria-label="조각 수"></div>
       <span class="dim" style="font-size:16px">학생이 조각보다 많으면 남는 학생은 처음부터 친구 돕기와 꾸미기를 해요. 조각이 남으면 먼저 끝낸 학생이 이어서 풀어요.</span></div>
     <div class="field"><span>난이도</span><span class="dim" style="font-size:16px">학생이 들어올 때 각자 쉬움·보통·어려움 중에 골라요. 조각마다 난이도가 달라도 칠판에서는 같은 그림이 돼요.</span></div>
@@ -52,10 +53,15 @@ export function openSetup() {
     ${modeNotice()}
   </div>`;
   const drawSizes = () => {
-    document.getElementById('sizes').innerHTML = LAYOUTS.map((l) => `<button class="size${l.n === setup.pieces ? ' on' : ''}" role="radio" aria-checked="${l.n === setup.pieces}" data-n="${l.n}"><span class="px">${l.c}×${l.r}</span><b>${l.n}조각</b><div class="mg" style="grid-template-columns:repeat(${l.c},8px)">${'<i></i>'.repeat(l.n)}</div><span class="dim" style="font-size:15px">${l.c * 10}×${l.r * 10}칸</span></button>`).join('');
+    document.getElementById('sizes').innerHTML = LAYOUTS.map((l) => `<button class="size${l.n === setup.pieces ? ' on' : ''}" role="radio" aria-checked="${l.n === setup.pieces}" data-n="${l.n}"><span class="px">${l.c}×${l.r}</span><b>${l.n}조각</b><div class="mg" style="grid-template-columns:repeat(${l.c},8px)">${'<i></i>'.repeat(l.n)}</div><span class="dim" style="font-size:15px">${l.c * setup.size}×${l.r * setup.size}칸</span></button>`).join('');
     document.querySelectorAll('#sizes button').forEach((b) => (b.onclick = () => { setup.pieces = +b.dataset.n; drawSizes(); }));
   };
   drawSizes();
+  document.querySelectorAll('#psize button').forEach((b) => (b.onclick = () => {
+    setup.size = +b.dataset.v;
+    document.querySelectorAll('#psize button').forEach((x) => x.setAttribute('aria-pressed', x === b));
+    drawSizes();
+  }));
   const pics = document.getElementById('pics');
   const btn = (p) => `<button class="pick-pic${p.id === setup.picture ? ' on' : ''}" role="radio" aria-checked="${p.id === setup.picture}" data-id="${esc(p.id)}"><img src="${thumb(p)}" alt=""><span>${esc(p.name)}</span></button>`;
   const used = new Set();
@@ -82,7 +88,7 @@ async function createRoom() {
       if (!m || old) c = t;
     }
     if (!c) throw new Error('no code');
-    await net.set(`rooms/${c}`, { meta: { code: c, pieces: setup.pieces, picture: setup.picture, status: 'lobby', createdAt: Date.now() } });
+    await net.set(`rooms/${c}`, { meta: { code: c, pieces: setup.pieces, size: setup.size, picture: setup.picture, status: 'lobby', createdAt: Date.now() } });
     try { localStorage.setItem(hostKey(c), '1'); } catch (_) {}
     openBoard(c);
   } catch (e) {
@@ -100,7 +106,7 @@ export function openBoard(c) {
     R = room;
     if (!R || !R.meta) { app.innerHTML = `<div class="sheet"><h2>방을 찾을 수 없어요</h2><p>코드 ${esc(c)}로 만든 방이 없어요.</p><div class="row"><button class="btn" onclick="location.href=location.pathname">처음으로</button></div></div>`; return; }
     if (!built || built.key !== R.meta.pieces + R.meta.level + R.meta.picture) {
-      built = buildPieces(R.meta); built.key = R.meta.pieces + R.meta.level + R.meta.picture; slots = decorSlots(built.w, built.h, c);
+      built = buildPieces(R.meta); built.key = R.meta.pieces + R.meta.level + R.meta.picture + R.meta.size; slots = decorSlots(built.w, built.h, c);
       built.levelOf = (id) => pieceRec(id).level || R.meta.level || 'normal';
     }
     hostTick(); schedule();
@@ -136,7 +142,7 @@ function renderLobby() {
   const L = built.L, url = joinUrl(code);
   if (view !== 'lobby') {
     view = 'lobby';
-    app.innerHTML = `<div class="top">${brand('WAITING ROOM')}<div class="chips"><div class="chip size">${L.n}조각</div>${fullBtn()}</div></div>
+    app.innerHTML = `<div class="top">${brand('WAITING ROOM')}<div class="chips"><div class="chip size">${L.n}조각 · ${built.n}×${built.n}</div>${fullBtn()}</div></div>
     <div class="lobby">
       <div class="join">
         <span style="font-size:22px">코드</span>
@@ -242,7 +248,7 @@ function renderPlay() {
   if (view !== 'play') {
     view = 'play';
     app.innerHTML = `<div class="top">${brand('PIXEL NONOGRAM')}<div class="chips">
-      <div class="chip code">CODE <b>${esc(code)}</b></div><div class="chip size">${L.n}조각</div>
+      <div class="chip code">CODE <b>${esc(code)}</b></div><div class="chip size">${L.n}조각 · ${built.n}×${built.n}</div>
       <div class="chip">접속 <span class="px" id="online" style="font-size:12px;color:var(--green)">0</span>명</div><span class="chips" id="ctrl"></span>${fullBtn()}</div></div>
     <div class="notice paused" id="pausedNote" hidden><b>잠깐 멈춤</b> · 학생들은 지금 칠할 수 없어요. <b>다시 하기</b>를 누르면 이어서 풀어요.</div>
     <div class="stage">
@@ -335,7 +341,7 @@ const unfinished = () => built.pieces.filter((p) => !pieceRec(p.id).done);
 // 끝까지 못 푼 조각: 전체 그림을 보여 줄 때 흐리게 덮어 구분한다
 function dimUnfinished(cv, scale) {
   const x = cv.getContext('2d'); x.fillStyle = 'rgba(11,15,26,.55)';
-  for (const p of unfinished()) x.fillRect((5 + p.c * 10) * scale, (5 + p.r * 10) * scale, 10 * scale, 10 * scale);
+  const n = built.n; for (const p of unfinished()) x.fillRect((5 + p.c * n) * scale, (5 + p.r * n) * scale, n * scale, n * scale);
 }
 function drawResult(cv, scale) {
   const d = boardData(), part = unfinished().length > 0;
@@ -383,7 +389,7 @@ function saveImage() {
     x.font = `${Math.round(sc * 1.3)}px "Do Hyeon", sans-serif`; x.textBaseline = 'bottom';
     for (const p of built.pieces) {
       const t = pieceRec(p.id).by || ''; if (!t) continue;
-      const px = (5 + p.c * 10) * sc + 8, py = (5 + p.r * 10 + 10) * sc - 8, w = x.measureText(t).width;
+      const n = built.n, px = (5 + p.c * n) * sc + 8, py = (5 + p.r * n + n) * sc - 8, w = x.measureText(t).width;
       x.fillStyle = 'rgba(11,15,26,.82)'; x.fillRect(px - 4, py - sc * 1.5, w + 8, sc * 1.6); x.fillStyle = '#E8ECFF'; x.fillText(t, px, py);
     }
   }
@@ -417,7 +423,7 @@ function closePanel() { flushTeacher(); panelId = null; panelGrid = null; tGrid 
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && panelId != null) closePanel(); });
 function wrongSet(p) {
   const st = cellsOf(p.id), w = new Set();
-  for (let i = 0; i < 100; i++) if (st[i] === '1' && !p.sol[i / 10 | 0][i % 10]) w.add(i);
+  const n = built.n; for (let i = 0; i < n * n; i++) if (st[i] === '1' && !p.sol[i / n | 0][i % n]) w.add(i);
   return w;
 }
 function flushTeacher() {
@@ -437,9 +443,16 @@ function refreshPanel(force) {
   const hs = Object.values(rec.helpers || {});
   const left = CHECKS_PER_PIECE + (rec.bonus || 0) - (rec.checks || 0);
   const w = wrongSet(p);
-  const sig = [rec.done, rec.owner, hs.join(), left, panelWrong, panelCool > Date.now(), w.size, !!rec.request, o && o.online, tTool].join('|');
+  const sig = [rec.done, rec.owner, hs.join(), left, panelWrong, panelCool > Date.now(), !!rec.request, o && o.online, tTool].join('|');
   if (panelGrid && panelGrid.isDragging()) return;
-  if (!force && sig === panelSig && panelGrid) { panelGrid.refresh(); const pg = document.getElementById('pPct'); if (pg) pg.textContent = Math.round(progressOf(p) * 100); return; }
+  if (!force && sig === panelSig && panelGrid) {
+    // 칠한 칸이 바뀌면 판과 숫자만 고친다 (다시 그리면 선생님이 누르던 칸을 놓친다)
+    panelGrid.refresh();
+    const pg = document.getElementById('pPct'); if (pg) pg.textContent = Math.round(progressOf(p) * 100);
+    const pw = document.getElementById('pWrong'); if (pw && !panelWrong) pw.textContent = `틀린 칸 보기 (${w.size})`;
+    const pr = document.getElementById('pReveal'); if (pr) pr.disabled = !w.size;
+    return;
+  }
   panelSig = sig;
   if (rec.done || !o) {
     el.innerHTML = `<div class="sheet"><h2>${p.label} 조각</h2><p>${rec.done ? '이 조각은 완성됐어요.' : '지금은 맡은 학생이 없어요.'}</p><div class="row"><button class="btn" id="pClose">닫기</button></div></div>`;

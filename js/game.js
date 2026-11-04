@@ -20,6 +20,11 @@ export const LEVELS = {
   hard: { name: '어려움', note: '자신 있어요' },
 };
 export const LEVEL_KEYS = ['easy', 'normal', 'hard'];
+// 조각 한 변의 칸 수. 7×7은 그림을 42×35로 줄인 small 그림을 쓴다
+export const PIECE_SIZES = [
+  { n: 10, name: '10×10', note: '그림이 촘촘하고 오래 풀어요' },
+  { n: 7, name: '7×7', note: '금방 풀고, 폰에서 칸이 커요' },
+];
 export const layoutOf = (n) => LAYOUTS.find((l) => l.n === n) || LAYOUTS[2];
 export const pictureOf = (id) => PICTURES.find((p) => p.id === id) || PICTURES[0];
 export { PICTURES };
@@ -31,15 +36,17 @@ export function buildPieces(meta) {
   const L = layoutOf(meta.pieces);
   const pic = pictureOf(meta.picture);
   const [ox, oy] = (pic.crop && pic.crop[meta.pieces]) || [L.ox, L.oy];
-  const built = { L, pic, pieces: [], w: L.c * 10, h: L.r * 10, levelOf: () => meta.level || 'normal' };
+  const n = meta.size === 7 && pic.small ? 7 : 10;
+  const src = n === 7 ? pic.small : pic;
+  const built = { L, pic, n, pieces: [], w: L.c * n, h: L.r * n, levelOf: () => meta.level || 'normal' };
   for (let r = 0; r < L.r; r++) for (let c = 0; c < L.c; c++) {
     const lv = {};
-    for (const key of Object.keys(pic.levels)) {
-      const rows = pic.levels[key], sol = [], ch = [];
-      for (let y = 0; y < 10; y++) {
+    for (const key of Object.keys(src.levels)) {
+      const rows = src.levels[key], sol = [], ch = [];
+      for (let y = 0; y < n; y++) {
         sol.push([]); ch.push([]);
-        for (let x = 0; x < 10; x++) {
-          const k = rows[(r + oy) * 10 + y][(c + ox) * 10 + x];
+        for (let x = 0; x < n; x++) {
+          const k = rows[(r + oy) * n + y][(c + ox) * n + x];
           sol[y].push(k === k.toUpperCase() ? 1 : 0);
           ch[y].push(k);
         }
@@ -57,8 +64,10 @@ export function buildPieces(meta) {
 }
 
 // 칸 상태 문자열: 100글자, '0' 빈칸, '1' 칠함, '2' ×표시
+// 조각 크기 n이면 n×n 글자. 크기는 글자 수로 알아낸다
 export const EMPTY = '0'.repeat(100);
-export const toGrid = (s) => { const t = s || EMPTY; const g = []; for (let r = 0; r < 10; r++) { g.push([]); for (let c = 0; c < 10; c++) g[r].push(+t[r * 10 + c] || 0); } return g; };
+export const emptyOf = (n) => '0'.repeat(n * n);
+export const toGrid = (s) => { const t = s || EMPTY, n = Math.round(Math.sqrt(t.length)); const g = []; for (let r = 0; r < n; r++) { g.push([]); for (let c = 0; c < n; c++) g[r].push(+t[r * n + c] || 0); } return g; };
 export const fromGrid = (g) => g.map((r) => r.join('')).join('');
 
 export function hintOf(a) {
@@ -164,11 +173,11 @@ export function drawPicture(cv, { built, cells = {}, done = {}, decor = [], slot
   }
   for (const p of pieces) {
     const full = all || done[p.id];
-    const st = cells[p.id] || EMPTY;
-    for (let y = 0; y < 10; y++) for (let xx = 0; xx < 10; xx++) {
-      const gx = (MARGIN + p.c * 10 + xx) * scale, gy = (MARGIN + p.r * 10 + y) * scale;
+    const n = built.n || 10, st = cells[p.id] || emptyOf(n);
+    for (let y = 0; y < n; y++) for (let xx = 0; xx < n; xx++) {
+      const gx = (MARGIN + p.c * n + xx) * scale, gy = (MARGIN + p.r * n + y) * scale;
       if (full) { x.fillStyle = pic.pal[p.ch[y][xx]]; x.fillRect(gx, gy, scale, scale); }
-      else if (st[y * 10 + xx] === '1') {
+      else if (st[y * n + xx] === '1') {
         // 칠한 칸은 맞든 틀리든 그 영역의 '칠하는 색'으로 보인다 (틀린 칸도 주변과 비슷한 색이라 티가 나지 않음)
         x.fillStyle = pic.pal[p.ch[y][xx].toUpperCase()]; x.fillRect(gx, gy, scale, scale);
       } else { x.fillStyle = '#1A2038'; x.fillRect(gx + 1, gy + 1, scale - 2, scale - 2); }
@@ -196,9 +205,9 @@ export function buildGrid(host, o) {
   const kR = Math.max(...rh.map((h) => h.length)), kC = Math.max(...chs.map((h) => h.length));
   const wide = window.innerWidth >= 700;
   const avail = Math.max(260, host.clientWidth - 14);
-  const fs = n <= 5 ? 13 : (wide ? 12 : 8);
+  const fs = n <= 5 ? 13 : n <= 7 ? (wide ? 13 : 11) : (wide ? 12 : 8);
   const hw = kR * (fs + 4) + 8, hh = Math.ceil(kC * fs * 1.5 + 8);
-  const maxCs = n <= 5 ? 56 : (wide ? 48 : 40);
+  const maxCs = n <= 5 ? 56 : n <= 7 ? 54 : (wide ? 48 : 40);
   const cs = Math.max(22, Math.min(maxCs, Math.floor((avail - hw) / n)));
   const wrap = document.createElement('div'); wrap.className = 'nono ' + (o.cls || '');
   const g = document.createElement('div'); g.className = 'ng';
