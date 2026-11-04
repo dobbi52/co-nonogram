@@ -1,7 +1,7 @@
 // 서버 연결. Firebase Realtime Database가 설정되어 있으면 그것을 쓰고,
 // 없으면 같은 브라우저의 창끼리 localStorage + BroadcastChannel로 연결하는 시험 모드로 돈다.
 // 두 방식 모두 같은 함수(set, update, push, on, ...)로 쓴다. 경로는 'rooms/1234/pieces/3' 처럼 쓴다.
-import { firebaseConfig } from './firebase-config.js?v=1104-1102';
+import { firebaseConfig } from './firebase-config.js?v=1104-1107';
 
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
 let impl = null;
@@ -18,6 +18,32 @@ export function explain(e) {
   return '서버에 연결하지 못했어요. (' + (c || (e && e.message) || e) + ')';
 }
 export let mode = 'local';
+
+// ───── 연결 방식 고르기 ─────
+// 기본은 웹소켓. 7초 안에 연결이 안 되거나 1분 안에 3번 넘게 끊기면 이 기기는 7일 동안 우회 방식을 쓰고 다시 연다.
+const LP_KEY = 'cono-longpoll-until';
+let longPoll = (() => { try { return Number(localStorage.getItem(LP_KEY) || 0) > Date.now(); } catch (_) { return false; } })();
+export const transport = () => (mode !== 'firebase' ? '' : longPoll ? '우회 연결' : '기본 연결');
+function switchToLongPoll() {
+  try {
+    localStorage.setItem(LP_KEY, String(Date.now() + 7 * 24 * 3600e3));
+    if (Number(localStorage.getItem(LP_KEY)) > Date.now()) { location.reload(); return; }
+  } catch (_) {}
+  // 기억할 수 없는 기기(사생활 보호 창 등)는 주소에 표시해서 다시 연다
+  const u = new URL(location.href); u.searchParams.set('lp', '1'); location.replace(u.toString());
+}
+if (new URLSearchParams(location.search).get('lp') === '1') longPoll = true;
+function watchConnection(db, d) {
+  let everConnected = false; const drops = [];
+  const first = setTimeout(() => { if (!everConnected) switchToLongPoll(); }, 7000);
+  db.onValue(db.ref(d, '.info/connected'), (s) => {
+    if (s.val()) { everConnected = true; clearTimeout(first); return; }
+    if (!everConnected) return;
+    const now = Date.now(); drops.push(now);
+    while (drops.length && now - drops[0] > 60000) drops.shift();
+    if (drops.length >= 3) switchToLongPoll();
+  });
+}
 let myUid = null;
 
 export async function connect() {
@@ -60,8 +86,11 @@ async function firebaseImpl() {
   const au = auth.getAuth(a);
   const cred = await auth.signInAnonymously(au);
   myUid = cred.user.uid;
+  // 학교 망처럼 웹소켓을 막거나 끊는 곳에서는 우회 방식(롱 폴링)으로 연결한다
+  if (longPoll && typeof db.forceLongPolling === 'function') db.forceLongPolling();
   const d = db.getDatabase(a);
   const r = (p) => db.ref(d, p);
+  if (!longPoll) watchConnection(db, d);
   return {
     set: (p, v) => db.set(r(p), v),
     update: (patch) => db.update(db.ref(d), patch),
