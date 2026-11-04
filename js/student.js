@@ -60,7 +60,7 @@ export function openJoin(prefill) {
       ss.set('cono-name-' + c, n); ss.set('cono-lastname', n); ss.set('cono-level', lv);
       openStudent(c);
     } catch (_) {
-      err.textContent = '연결하지 못했어요. 인터넷을 확인하고 다시 눌러 주세요.'; document.getElementById('go').disabled = false;
+      err.textContent = net.explain(_); document.getElementById('go').disabled = false;
     }
   };
 }
@@ -85,8 +85,9 @@ export async function openStudent(c) {
   if (unsub) unsub();
   unsub = net.on(base(), (room) => {
     R = room;
-    if (R && R.meta && (!built || built.key !== R.meta.pieces + R.meta.level + R.meta.picture)) {
-      built = buildPieces(R.meta); built.key = R.meta.pieces + R.meta.level + R.meta.picture + R.meta.size;
+    const key = R && R.meta ? [R.meta.pieces, R.meta.level, R.meta.picture, R.meta.size].join('|') : '';
+    if (R && R.meta && (!built || built.key !== key)) {
+      built = buildPieces(R.meta); built.key = key;
       built.levelOf = (id) => pieceRec(id).level || R.meta.level || 'normal';
       built.slots = decorSlots(built.w, built.h, code);
     }

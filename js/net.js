@@ -12,6 +12,8 @@ export function explain(e) {
   if (c === 'auth/operation-not-allowed' || c === 'auth/admin-restricted-operation') return 'Firebase에서 익명 로그인이 꺼져 있어요. Authentication → 로그인 방법 → 익명을 켜 주세요.';
   if (c === 'auth/unauthorized-domain') return `이 주소(${location.hostname})가 승인된 도메인에 없어요. Authentication → 설정 → 승인된 도메인에 추가해 주세요.`;
   if (c === 'auth/configuration-not-found') return 'Firebase에서 Authentication을 아직 시작하지 않았어요. Authentication → 시작하기를 눌러 주세요.';
+  if (c === 'timeout') return '서버(Firebase 데이터베이스)에서 답이 오지 않아요. 학교 인터넷이 Firebase를 막고 있거나 연결이 불안정할 수 있어요. 다른 인터넷(예: 휴대폰 핫스폿)으로도 해 보세요.';
+  if (/permission[_ ]denied/i.test(c + ' ' + ((e && e.message) || ''))) return '데이터베이스 규칙이 막고 있어요. Firebase → Realtime Database → 규칙 탭에 SETUP.md의 규칙을 붙여 넣고 게시해 주세요.';
   if (c === 'auth/network-request-failed' || /network|fetch/i.test(String(e))) return '인터넷에 연결되어 있지 않거나 Firebase에 닿지 않아요. 연결을 확인하고 새로고침해 주세요.';
   return '서버에 연결하지 못했어요. (' + (c || (e && e.message) || e) + ')';
 }
@@ -32,10 +34,19 @@ export async function connect() {
   return mode;
 }
 
+// 서버가 답하지 않으면 끝없이 기다리지 않고 실패로 알린다
+const LIMIT_MS = 12000;
+function limit(promise) {
+  let t;
+  const timeout = new Promise((_, rej) => { t = setTimeout(() => { const e = new Error('timeout'); e.code = 'timeout'; rej(e); }, LIMIT_MS); });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
+}
 export const uid = () => myUid;
-export const set = (p, v) => impl.set(p, v);
-export const update = (patch) => impl.update(patch); // { 'a/b': 1, 'a/c': null } 처럼 여러 경로를 한 번에
-export const get = (p) => impl.get(p);
+export const set = (p, v) => limit(impl.set(p, v));
+export const update = (patch) => limit(impl.update(patch)); // { 'a/b': 1, 'a/c': null } 처럼 여러 경로를 한 번에
+export const get = (p) => limit(impl.get(p));
+// 서버와 이어져 있는지 알려 준다 (시험 모드는 늘 이어진 것으로)
+export const onConnection = (cb) => (impl.onConnection ? impl.onConnection(cb) : cb(true));
 export const on = (p, cb) => impl.on(p, cb); // 값이 바뀔 때마다 cb(value). 끊는 함수를 돌려준다
 export const push = (p, v) => impl.push(p, v);
 export const onDisconnect = (patch) => impl.onDisconnect(patch);
@@ -58,6 +69,7 @@ async function firebaseImpl() {
     on: (p, cb) => db.onValue(r(p), (s) => cb(s.val())),
     push: (p, v) => db.push(r(p), v).key,
     onDisconnect: (patch) => db.onDisconnect(db.ref(d)).update(patch),
+    onConnection: (cb) => db.onValue(db.ref(d, '.info/connected'), (s) => cb(!!s.val())),
   };
 }
 

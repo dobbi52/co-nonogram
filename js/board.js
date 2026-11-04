@@ -79,6 +79,7 @@ export function openSetup() {
 }
 async function createRoom() {
   const btn = document.getElementById('create'); btn.disabled = true;
+  document.getElementById('err').textContent = '방을 만드는 중…';
   try {
     let c = null;
     for (let i = 0; i < 25 && !c; i++) {
@@ -93,7 +94,7 @@ async function createRoom() {
     openBoard(c);
   } catch (e) {
     console.error(e); btn.disabled = false;
-    document.getElementById('err').textContent = '방을 만들지 못했어요. 인터넷 연결을 확인하고 다시 눌러 주세요.';
+    document.getElementById('err').textContent = '방을 만들지 못했어요. ' + net.explain(e);
   }
 }
 
@@ -105,8 +106,9 @@ export function openBoard(c) {
   unsub = net.on(`rooms/${c}`, (room) => {
     R = room;
     if (!R || !R.meta) { app.innerHTML = `<div class="sheet"><h2>방을 찾을 수 없어요</h2><p>코드 ${esc(c)}로 만든 방이 없어요.</p><div class="row"><button class="btn" onclick="location.href=location.pathname">처음으로</button></div></div>`; return; }
-    if (!built || built.key !== R.meta.pieces + R.meta.level + R.meta.picture) {
-      built = buildPieces(R.meta); built.key = R.meta.pieces + R.meta.level + R.meta.picture + R.meta.size; slots = decorSlots(built.w, built.h, c);
+    const key = [R.meta.pieces, R.meta.level, R.meta.picture, R.meta.size].join('|');
+    if (!built || built.key !== key) {
+      built = buildPieces(R.meta); built.key = key; slots = decorSlots(built.w, built.h, c);
       built.levelOf = (id) => pieceRec(id).level || R.meta.level || 'normal';
     }
     hostTick(); schedule();

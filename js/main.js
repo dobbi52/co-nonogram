@@ -31,6 +31,18 @@ async function start() {
     app.querySelector('p').textContent = net.explain(e);
     return;
   }
+  // 서버와 끊기면 화면 위에 알린다 (잠깐 끊기는 것은 무시)
+  let offTimer = 0;
+  net.onConnection((ok) => {
+    clearTimeout(offTimer);
+    let el = document.getElementById('netWarn');
+    if (ok) { if (el) el.hidden = true; return; }
+    offTimer = setTimeout(() => {
+      if (!el) { el = document.createElement('div'); el.id = 'netWarn'; el.className = 'netwarn'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+      el.textContent = '서버와 연결이 끊겼어요. 다시 연결하는 중… 오래 계속되면 인터넷을 확인해 주세요.';
+      el.hidden = false;
+    }, 4000);
+  });
   const q = new URLSearchParams(location.search);
   const code = (q.get('board') || q.get('room') || '').replace(/\D/g, '').slice(0, 4);
   if (q.has('board') && code) openBoard(code);
