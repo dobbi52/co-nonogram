@@ -1,7 +1,7 @@
 // 학생 화면: 코드로 들어가기 → 기다리기 → 내 조각 풀기 / 친구 돕기 / 꾸미기 퍼즐 → 완성
-import * as net from './net.js?v=1106-1009';
-import { app, brand, modeNotice, toast, go, verLine } from './ui.js?v=1106-1009';
-import { buildPieces, josa, LEVELS, LEVEL_KEYS, decorSlots, SPRITES, esc, emptyOf, toGrid, fromGrid, isSolved, lineMatches, filledCount, buildGrid, MAX_HELPERS, CHECKS_PER_PIECE } from './game.js?v=1106-1009';
+import * as net from './net.js?v=1106-1230';
+import { app, brand, modeNotice, toast, go, verLine } from './ui.js?v=1106-1230';
+import { buildPieces, josa, LEVELS, LEVEL_KEYS, decorSlots, SPRITES, esc, emptyOf, toGrid, fromGrid, isSolved, lineMatches, filledCount, buildGrid, MAX_HELPERS, CHECKS_PER_PIECE } from './game.js?v=1106-1230';
 
 let code = null, sid = null, myName = '', myLevel = 'normal', R = null, built = null, unsub = null, raf = 0;
 let lastSig = '', gridCtl = null, tool = 1;
@@ -73,6 +73,7 @@ export async function openStudent(c) {
   if (!myName) { openJoin(c); return; }
   go({ room: c });
   sid = ss.get('cono-sid-' + c);
+  if (sid && await net.get(`${base()}/kicked/${sid}`)) { showKicked(); return; }
   const existing = sid ? await net.get(`${base()}/students/${sid}`) : null;
   if (!existing) {
     sid = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -95,7 +96,20 @@ export async function openStudent(c) {
   });
   setInterval(() => { if (R) schedule(); }, 1000);
 }
-function schedule() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; render(); }); }
+function schedule() { if (kickedShown || raf) return; raf = requestAnimationFrame(() => { raf = 0; if (!kickedShown) render(); }); }
+
+// ───── 선생님이 내보냈을 때 ─────
+// 다시 들어오려면 이름을 새로 넣어야 한다 (이름을 잘못 넣은 학생은 바르게 고쳐 들어올 수 있다)
+let kickedShown = false;
+function showKicked() {
+  kickedShown = true;
+  if (unsub) { unsub(); unsub = null; }
+  clearTimeout(writeTimer);
+  ss.set('cono-name-' + code, ''); ss.set('cono-lastname', ''); ss.set('cono-sid-' + code, '');
+  document.title = '협동 노노그램';
+  app.innerHTML = `<div class="sheet blue"><h2>선생님이 방에서 내보냈어요</h2><p>궁금한 점은 선생님께 여쭤보세요.</p><div class="row"><button class="btn blue" id="kickedHome">처음으로</button></div></div>`;
+  document.getElementById('kickedHome').onclick = () => { location.href = location.pathname; };
+}
 
 function signature() {
   const m = me(); const st = R.meta.status;
@@ -111,6 +125,7 @@ function signature() {
 }
 function render() {
   if (!R || !R.meta) { app.innerHTML = `<div class="sheet blue"><h2>방이 사라졌어요</h2><p>선생님께 새 코드를 물어보세요.</p><div class="row"><button class="btn blue" onclick="location.href=location.pathname">처음으로</button></div></div>`; return; }
+  if (R.kicked && R.kicked[sid]) { showKicked(); return; }
   const m = me();
   if (!m) { // 지워졌으면 다시 등록
     net.set(`${base()}/students/${sid}`, { name: myName, level: myLevel, joinedAt: Date.now(), mode: 'wait', online: true });

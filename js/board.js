@@ -1,9 +1,9 @@
 // 전자칠판(선생님) 화면: 방 만들기 → 대기실 → 함께 푸는 칠판 → 완성
 // 칠판 화면은 "진행 맡은 칠판"으로서 조각 배정, 자리 비운 학생 정리, 완성 판정을 맡는다.
-import * as net from './net.js?v=1106-1009';
-import { app, brand, modeNotice, toast, go, joinUrl, verLine } from './ui.js?v=1106-1009';
-import * as music from './music.js?v=1106-1009';
-import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorSlots, esc, shuffle, EMPTY, MAX_HELPERS, CHECKS_PER_PIECE, buildGrid, toGrid, fromGrid, emptyOf, PIECE_SIZES } from './game.js?v=1106-1009';
+import * as net from './net.js?v=1106-1230';
+import { app, brand, modeNotice, toast, go, joinUrl, verLine } from './ui.js?v=1106-1230';
+import * as music from './music.js?v=1106-1230';
+import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorSlots, esc, shuffle, EMPTY, MAX_HELPERS, CHECKS_PER_PIECE, buildGrid, toGrid, fromGrid, emptyOf, PIECE_SIZES } from './game.js?v=1106-1230';
 
 const OFFLINE_RELEASE_MS = 45000; // 조각을 맡은 학생이 이만큼 접속이 끊기면 조각을 다른 학생에게 넘긴다
 const setup = { pieces: 25, size: 10, picture: PICTURES[0].id };
@@ -19,6 +19,7 @@ const PICTURE_GROUPS = [
 let code = null, R = null, built = null, slots = [], isHost = false, unsub = null, view = '', timer = 0, raf = 0;
 let showNames = false, lastPatch = '', lastPatchAt = 0, lastDoneId = null, lastDoneAt = 0, doneSeen = null;
 const hostKey = (c) => 'cono-host-' + c;
+let kickPick = null; // 내보낼지 묻는 중인 학생
 
 const sorted = (obj) => Object.entries(obj || {}).sort((a, b) => (a[1].joinedAt || 0) - (b[1].joinedAt || 0));
 const pieceRec = (id) => (R.pieces || {})['p' + id] || {};
@@ -106,6 +107,8 @@ export function openBoard(c) {
   if (unsub) unsub();
   unsub = net.on(`rooms/${c}`, (room) => {
     R = room;
+    // 내보낸 학생은 칠판에서 없는 사람으로 친다 (접속이 끊길 때 남는 기록까지 무시)
+    if (R && R.kicked && R.students) for (const id of Object.keys(R.kicked)) delete R.students[id];
     if (!R || !R.meta) { app.innerHTML = `<div class="sheet"><h2>방을 찾을 수 없어요</h2><p>코드 ${esc(c)}로 만든 방이 없어요.</p><div class="row"><button class="btn" onclick="location.href=location.pathname">처음으로</button></div></div>`; return; }
     const key = [R.meta.pieces, R.meta.level, R.meta.picture, R.meta.size].join('|');
     if (!built || built.key !== key) {
@@ -169,6 +172,8 @@ function renderLobby() {
       <div class="card">
         <h2>들어온 학생 <span class="px" id="cnt" style="font-size:13px;color:var(--green)">0</span></h2>
         <div class="names" id="names"></div>
+        <div class="kickbar" id="kickBar" hidden></div>
+        <span class="dim" style="font-size:15px">이름을 누르면 그 학생을 내보낼 수 있어요.</span>
         <span class="dim" id="note" style="font-size:17px"></span>
         <div class="row"><button class="btn" id="startBtn">시작하기</button><button class="btn ghost small" id="newRoom">새 방 만들기</button></div>
         <div class="notice">선생님 폰이나 노트북으로 따로 보며 학생을 도우려면 이 주소를 여세요. 반 친구들 앞에 학생 판을 크게 띄우지 않아도 돼요.<br><span style="color:var(--fg);word-break:break-all">${esc(teacherUrl())}</span></div>
@@ -177,6 +182,13 @@ function renderLobby() {
     </div>${modeNotice()}`;
     const q = document.getElementById('qr');
     try { if (window.qrcode) { const qr = window.qrcode(0, 'M'); qr.addData(url); qr.make(); q.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); } } catch (_) {}
+    document.getElementById('names').onclick = (e) => { const b = e.target.closest('[data-kick]'); if (b) { kickPick = b.dataset.kick; schedule(); } };
+    document.getElementById('kickBar').onclick = (e) => {
+      if (e.target.id === 'kickNo') kickPick = null;
+      else if (e.target.id === 'kickYes') kickStudent(kickPick);
+      else return;
+      schedule();
+    };
     document.getElementById('startBtn').onclick = startGame;
     document.getElementById('newRoom').onclick = () => { location.href = location.pathname; };
     bindTop();
@@ -184,12 +196,29 @@ function renderLobby() {
   }
   const ss = sorted(R.students);
   document.getElementById('cnt').textContent = ss.length;
-  document.getElementById('names').innerHTML = ss.length ? ss.map(([, s]) => `<span class="${s.online === false ? 'off' : ''}">${esc(s.name)}</span>`).join('') : '<span class="dim" style="border:none;padding:0">아직 아무도 없어요</span>';
+  document.getElementById('names').innerHTML = ss.length ? ss.map(([id, s]) => `<button type="button" class="${s.online === false ? 'off' : ''}${id === kickPick ? ' pick' : ''}" data-kick="${esc(id)}">${esc(s.name)}</button>`).join('') : '<span class="dim" style="border:none;padding:0">아직 아무도 없어요</span>';
+  const picked = kickPick && (R.students || {})[kickPick];
+  if (!picked) kickPick = null;
+  const kb = document.getElementById('kickBar');
+  kb.hidden = !picked;
+  const kbSig = picked ? kickPick + picked.name : '';
+  if (kb.dataset.sig !== kbSig) {
+    kb.dataset.sig = kbSig;
+    kb.innerHTML = picked ? `<span><b>${esc(picked.name)}</b> 학생을 내보낼까요?</span><button type="button" class="btn pink small" id="kickYes">내보내기</button><button type="button" class="btn ghost small" id="kickNo">취소</button>` : '';
+  }
   const n = ss.length;
   document.getElementById('note').textContent = n === 0 ? '학생이 들어오면 시작할 수 있어요.'
     : n > L.n ? `조각보다 ${n - L.n}명 많아요. 남는 학생은 처음부터 친구 돕기와 꾸미기를 해요.`
     : n < L.n ? `조각이 ${L.n - n}개 남아요. 먼저 끝낸 학생이 이어서 풀어요.` : '학생과 조각 수가 딱 맞아요.';
   const sb = document.getElementById('startBtn'); sb.disabled = n === 0 || !isHost;
+}
+function kickStudent(id) {
+  const s = (R.students || {})[id];
+  kickPick = null;
+  if (!s) return;
+  const patch = { [`rooms/${code}/kicked/${id}`]: true, [`rooms/${code}/students/${id}`]: null };
+  if (s.piece != null) patch[`rooms/${code}/pieces/p${s.piece}/owner`] = null;
+  net.update(patch).catch((e) => toast(net.explain(e)));
 }
 function startGame() {
   if (!isHost) return;

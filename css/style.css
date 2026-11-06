@@ -90,8 +90,13 @@ input.codein{font-family:var(--px);font-size:24px;letter-spacing:8px;width:200px
 .join .qr svg{display:block;width:min(260px,60vw);height:auto;background:#fff;padding:8px}
 .join .url{font-size:16px;color:var(--dim);word-break:break-all}
 .names{display:flex;flex-wrap:wrap;gap:8px}
-.names span{border:3px solid var(--line2);padding:6px 10px;font-size:19px}
-.names span.off{opacity:.45}
+.names span,.names button{border:3px solid var(--line2);padding:6px 10px;font-size:19px;background:transparent;color:var(--fg);font-family:inherit}
+.names button{cursor:pointer;min-height:44px}
+.names button:hover,.names button.pick{border-color:var(--pink);color:var(--pink)}
+.names span.off,.names button.off{opacity:.45}
+.kickbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;font-size:18px;border:3px solid var(--pink);padding:8px 10px}
+.kickbar[hidden]{display:none}
+.kickbar b{color:var(--pink);font-weight:normal}
 
 /* 전자칠판 */
 .stage{display:flex;gap:18px;align-items:flex-start}
