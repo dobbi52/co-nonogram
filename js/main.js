@@ -2,10 +2,10 @@
 //   index.html            첫 화면 (선생님 / 학생 고르기)
 //   index.html?board=1234 전자칠판 (선생님)
 //   index.html?room=1234  학생 화면
-import * as net from './net.js?v=1106-1238';
-import { openSetup, openBoard } from './board.js?v=1106-1238';
-import { openJoin, openStudent } from './student.js?v=1106-1238';
-import { app, brand, modeNotice, go, verLine } from './ui.js?v=1106-1238';
+import * as net from './net.js?v=1106-1239';
+import { openSetup, openBoard } from './board.js?v=1106-1239';
+import { openJoin, openStudent } from './student.js?v=1106-1239';
+import { app, brand, modeNotice, go, verLine } from './ui.js?v=1106-1239';
 
 function home() {
   go(null);
