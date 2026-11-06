@@ -1,5 +1,5 @@
 // 게임 규칙과 공용 도구: 조각 배치, 힌트, 풀이 검사, 꾸미기 장식, 노노그램 판
-import { PICTURES } from './pictures.js?v=1106-1245';
+import { PICTURES } from './pictures.js?v=1106-1255';
 
 export const MARGIN = 5;        // 큰 그림 둘레 장식 테두리 칸 수
 export const MAX_HELPERS = 2;   // 한 조각에 들어올 수 있는 도우미 수
@@ -21,6 +21,15 @@ export const LEVELS = {
   hard: { name: '어려움', note: '자신 있어요' },
 };
 export const LEVEL_KEYS = ['easy', 'normal', 'hard'];
+// 난이도 고르는 작은 버튼 줄
+export const levelButtons = (cur, id) => `<div class="seg lvmini" id="${id}" role="group" aria-label="난이도">${LEVEL_KEYS.map((k) => `<button type="button" data-v="${k}" aria-pressed="${k === cur}">${LEVELS[k].name}</button>`).join('')}</div>`;
+// 풀던 조각의 난이도를 바꿀 때 쓸 내용. 난이도마다 정답이 달라서 판을 비우고 새로 푼다.
+export function levelPatch(root, id, level, owner) {
+  const p = `${root}/pieces/p${id}`;
+  const patch = { [`${root}/cells/p${id}`]: null, [`${p}/level`]: level, [`${p}/helpPaint`]: null, [`${p}/checks`]: null, [`${p}/bonus`]: null, [`${p}/reveal`]: null, [`${root}/hl/p${id}`]: null };
+  if (owner) patch[`${root}/students/${owner}/level`] = level;
+  return patch;
+}
 // 조각 한 변의 칸 수. 7×7은 그림을 42×35로 줄인 small 그림을 쓴다
 export const PIECE_SIZES = [
   { n: 10, name: '10×10', note: '그림이 촘촘하고 오래 풀어요' },

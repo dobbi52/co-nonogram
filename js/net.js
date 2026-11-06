@@ -1,7 +1,7 @@
 // 서버 연결. Firebase Realtime Database가 설정되어 있으면 그것을 쓰고,
 // 없으면 같은 브라우저의 창끼리 localStorage + BroadcastChannel로 연결하는 시험 모드로 돈다.
 // 두 방식 모두 같은 함수(set, update, push, on, ...)로 쓴다. 경로는 'rooms/1234/pieces/3' 처럼 쓴다.
-import { firebaseConfig } from './firebase-config.js?v=1106-1245';
+import { firebaseConfig } from './firebase-config.js?v=1106-1255';
 
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
 let impl = null;

@@ -1,7 +1,7 @@
 // 학생 화면: 코드로 들어가기 → 기다리기 → 내 조각 풀기 / 친구 돕기 / 꾸미기 퍼즐 → 완성
-import * as net from './net.js?v=1106-1245';
-import { app, brand, modeNotice, toast, go, verLine } from './ui.js?v=1106-1245';
-import { buildPieces, josa, LEVELS, LEVEL_KEYS, decorSlots, SPRITES, esc, emptyOf, toGrid, fromGrid, isSolved, lineMatches, filledCount, buildGrid, MAX_HELPERS, CHECKS_PER_PIECE, helpLimit } from './game.js?v=1106-1245';
+import * as net from './net.js?v=1106-1255';
+import { app, brand, modeNotice, toast, go, verLine } from './ui.js?v=1106-1255';
+import { buildPieces, josa, LEVELS, LEVEL_KEYS, decorSlots, SPRITES, esc, emptyOf, toGrid, fromGrid, isSolved, lineMatches, filledCount, buildGrid, MAX_HELPERS, CHECKS_PER_PIECE, helpLimit, levelButtons, levelPatch } from './game.js?v=1106-1255';
 
 let code = null, sid = null, myName = '', myLevel = 'normal', R = null, built = null, unsub = null, raf = 0;
 let lastSig = '', gridCtl = null, tool = 1;
@@ -113,14 +113,14 @@ function showKicked() {
 
 function signature() {
   const m = me(); const st = R.meta.status;
-  const parts = [st, !!R.meta.paused, m && m.mode, m && m.piece, m && m.helpTarget, m && m.want, decor && decor.done];
-  if (m && m.mode === 'solve') { const r = pieceRec(m.piece); parts.push(Object.keys(r.helpers || {}).join(), !!r.request, r.checks || 0, r.bonus || 0, confirmClear); }
+  const parts = [st, !!R.meta.paused, m && m.mode, m && m.piece, m && m.helpTarget, m && m.want, decor && decor.done, m && m.level];
+  if (m && m.mode === 'solve') { const r = pieceRec(m.piece); parts.push(Object.keys(r.helpers || {}).join(), !!r.request, r.checks || 0, r.bonus || 0, confirmClear, confirmLevel, built.levelOf(m.piece)); }
   if (m && m.mode === 'free') {
     parts.push(built.pieces.filter((p) => !pieceRec(p.id).done && !pieceRec(p.id).owner).length,
       built.pieces.map((p) => { const r = pieceRec(p.id); return r.done ? 'd' : (r.owner ? (r.request ? 'r' : 'o') + Object.keys(r.helpers || {}).length : '-'); }).join(''),
       Math.floor(Date.now() / 8000));
   }
-  if (m && m.mode === 'help') parts.push(hintCool > Date.now());
+  if (m && m.mode === 'help') parts.push(hintCool > Date.now(), m.helpTarget != null && built.levelOf(m.helpTarget));
   return parts.join('|');
 }
 function render() {
@@ -180,6 +180,7 @@ function draw() {
   if (st === 'lobby' || (st === 'play' && m.mode === 'wait')) {
     app.innerHTML = wrapStart + head('기다리는 중', 'blue', -1) + `<div class="pane"><h3>${esc(myName)}, 반가워요!</h3>
       <p>${st === 'lobby' ? '선생님이 시작하면 내 조각이 나와요.' : '조각을 받는 중이에요…'}</p>
+      <p>내 난이도: <b>${(LEVELS[m.level] || LEVELS.normal).name}</b></p>
       <p class="dim">코드 <span class="px" style="font-size:12px;color:var(--yellow)">${esc(code)}</span></p></div>${modeNotice()}</div>`;
     return;
   }
@@ -206,7 +207,15 @@ function draw() {
 // ───── 내 조각 풀기 ─────
 function drawSolve(m) {
   const p = built.pieces[m.piece], rec = pieceRec(p.id);
-  if (gridPiece !== p.id) { grid = toGrid(cellsOf(p.id)); gridPiece = p.id; wrong = null; confirmClear = false; lastRevealAt = rec.reveal || 0; dirty = {}; lastHelpCount = Object.keys(rec.helpPaint || {}).length; }
+  if (gridPiece !== p.id) { grid = toGrid(cellsOf(p.id)); gridPiece = p.id; wrong = null; confirmClear = false; lastRevealAt = rec.reveal || 0; dirty = {}; lastHelpCount = Object.keys(rec.helpPaint || {}).length; gridLevel = built.levelOf(p.id); confirmLevel = null; }
+  else if (gridLevel !== built.levelOf(p.id)) {
+    // 난이도가 바뀌면 정답이 달라지므로 빈 판에서 새로 푼다
+    gridLevel = built.levelOf(p.id);
+    clearTimeout(writeTimer); pending = false; dirty = {};
+    grid = toGrid(cellsOf(p.id)); wrong = null; msgOverride = null; confirmClear = false; confirmLevel = null; lastHelpCount = 0; lastRevealAt = rec.reveal || 0;
+    if (!levelByMe) toast(`선생님이 난이도를 ${(LEVELS[gridLevel] || {}).name}으로 바꿔 줬어요`);
+    levelByMe = false;
+  }
   const hs = Object.entries(rec.helpers || {});
   const names = esc(josa(hs.map(([, n]) => n).join(', '), '이', '가'));
   let banner = '';
@@ -220,7 +229,10 @@ function drawSolve(m) {
       ? `<div class="banner pink"><span>정말 다 지울까요?</span><span class="row" style="gap:8px"><button class="btn small pink" id="clearYes">지우기</button><button class="btn small ghost" id="clearNo">취소</button></span></div>`
       : `<div class="subtools three">${rec.request || hs.length ? '<span></span>' : '<button class="btn ghost small" id="ask">도와줘</button>'}
       <button class="btn ghost small" id="check" ${left > 0 ? '' : 'disabled'}>검사하기 ${left > 0 ? `(${left})` : '(다 씀)'}</button>
-      <button class="btn ghost small" id="clear">전체 지우기</button></div>`}</div>`;
+      <button class="btn ghost small" id="clear">전체 지우기</button></div>`}
+    ${confirmLevel
+      ? `<div class="banner pink"><span>칠한 칸이 지워져요. ${(LEVELS[confirmLevel] || {}).name}으로 바꿀까요?</span><span class="row" style="gap:8px"><button class="btn small pink" id="lvYes">바꾸기</button><button class="btn small ghost" id="lvNo">취소</button></span></div>`
+      : `<div class="lvrow"><span class="dim">난이도</span>${levelButtons(built.levelOf(p.id), 'lvNow')}</div>`}</div>`;
   gridCtl = buildGrid(document.getElementById('gh'), {
     sol: p.sol, editable: true, tool: () => tool,
     get: (r, c) => grid[r][c],
@@ -230,6 +242,21 @@ function drawSolve(m) {
     onChange: () => { if (isSolved(p.sol, grid)) finishPiece(p); else updateMsg(); },
   });
   bindTools();
+  const applyLevel = (lv) => {
+    confirmLevel = null; levelByMe = true;
+    clearTimeout(writeTimer); pending = false; dirty = {};
+    ss.set('cono-level', lv);
+    net.update(levelPatch(base(), p.id, lv, sid));
+    log(`${p.label} 난이도 ${(LEVELS[lv] || {}).name}`);
+    lastSig = ''; schedule();
+  };
+  document.querySelectorAll('#lvNow button').forEach((b) => (b.onclick = () => {
+    const lv = b.dataset.v;
+    if (lv === built.levelOf(p.id)) return;
+    if (/[12]/.test(fromGrid(grid))) { confirmLevel = lv; lastSig = ''; schedule(); } else applyLevel(lv);
+  }));
+  const lvYes = document.getElementById('lvYes');
+  if (lvYes) { lvYes.onclick = () => applyLevel(confirmLevel); document.getElementById('lvNo').onclick = () => { confirmLevel = null; lastSig = ''; schedule(); }; }
   const ask = document.getElementById('ask');
   if (ask) ask.onclick = () => { net.update({ [`${base()}/pieces/p${p.id}/request`]: true, [`${base()}/students/${sid}/declined`]: null }); log(`도와줘! (${p.label})`); };
   const dec = document.getElementById('decline');
@@ -275,7 +302,7 @@ function updateMsg() {
   if (filledCount(grid) >= p.fills && !isSolved(p.sol, grid)) { el.className = 'msg bad'; el.textContent = '어딘가 틀렸어요. 힌트를 다시 살펴봐요'; }
   else { el.className = 'msg'; el.textContent = `힌트가 맞은 줄 ${ok} / ${n * 2}`; }
 }
-let pending = false, dirty = {}, lastHelpCount = 0, lastHelpToast = 0;
+let pending = false, dirty = {}, lastHelpCount = 0, lastHelpToast = 0, gridLevel = null, confirmLevel = null, levelByMe = false;
 function queueWrite(id) {
   pending = true;
   clearTimeout(writeTimer);
