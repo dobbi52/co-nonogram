@@ -1,9 +1,9 @@
 // 전자칠판(선생님) 화면: 방 만들기 → 대기실 → 함께 푸는 칠판 → 완성
 // 칠판 화면은 "진행 맡은 칠판"으로서 조각 배정, 자리 비운 학생 정리, 완성 판정을 맡는다.
-import * as net from './net.js?v=1106-1239';
-import { app, brand, modeNotice, toast, go, joinUrl, verLine } from './ui.js?v=1106-1239';
-import * as music from './music.js?v=1106-1239';
-import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorSlots, esc, shuffle, EMPTY, MAX_HELPERS, CHECKS_PER_PIECE, buildGrid, toGrid, fromGrid, emptyOf, PIECE_SIZES } from './game.js?v=1106-1239';
+import * as net from './net.js?v=1106-1245';
+import { app, brand, modeNotice, toast, go, joinUrl, verLine } from './ui.js?v=1106-1245';
+import * as music from './music.js?v=1106-1245';
+import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorSlots, esc, shuffle, EMPTY, MAX_HELPERS, CHECKS_PER_PIECE, buildGrid, toGrid, fromGrid, emptyOf, PIECE_SIZES } from './game.js?v=1106-1245';
 
 const OFFLINE_RELEASE_MS = 45000; // 조각을 맡은 학생이 이만큼 접속이 끊기면 조각을 다른 학생에게 넘긴다
 const setup = { pieces: 25, size: 10, picture: PICTURES[0].id };

@@ -1,7 +1,7 @@
 // 학생 화면: 코드로 들어가기 → 기다리기 → 내 조각 풀기 / 친구 돕기 / 꾸미기 퍼즐 → 완성
-import * as net from './net.js?v=1106-1239';
-import { app, brand, modeNotice, toast, go, verLine } from './ui.js?v=1106-1239';
-import { buildPieces, josa, LEVELS, LEVEL_KEYS, decorSlots, SPRITES, esc, emptyOf, toGrid, fromGrid, isSolved, lineMatches, filledCount, buildGrid, MAX_HELPERS, CHECKS_PER_PIECE } from './game.js?v=1106-1239';
+import * as net from './net.js?v=1106-1245';
+import { app, brand, modeNotice, toast, go, verLine } from './ui.js?v=1106-1245';
+import { buildPieces, josa, LEVELS, LEVEL_KEYS, decorSlots, SPRITES, esc, emptyOf, toGrid, fromGrid, isSolved, lineMatches, filledCount, buildGrid, MAX_HELPERS, CHECKS_PER_PIECE, helpLimit } from './game.js?v=1106-1245';
 
 let code = null, sid = null, myName = '', myLevel = 'normal', R = null, built = null, unsub = null, raf = 0;
 let lastSig = '', gridCtl = null, tool = 1;
@@ -151,6 +151,9 @@ function adoptRemote(m) {
   grid = toGrid(remote); wrong = null; msgOverride = null;
   const ta = pieceRec(m.piece).teacherAt || 0;
   if (ta > lastTeacherAt) { lastTeacherAt = ta; toast('선생님이 내 판에 칸을 칠해 줬어요'); }
+  const hc = Object.keys(pieceRec(m.piece).helpPaint || {}).length;
+  if (hc > lastHelpCount && Date.now() - lastHelpToast > 5000) { lastHelpToast = Date.now(); toast('친구가 내 판에 칸을 칠해 줬어요'); }
+  lastHelpCount = hc;
   if (gridCtl) { gridCtl.refresh(); updateMsg(); }
   const p = built.pieces[m.piece];
   if (isSolved(p.sol, grid) && R.meta.status === 'play') finishPiece(p);
@@ -203,7 +206,7 @@ function draw() {
 // ───── 내 조각 풀기 ─────
 function drawSolve(m) {
   const p = built.pieces[m.piece], rec = pieceRec(p.id);
-  if (gridPiece !== p.id) { grid = toGrid(cellsOf(p.id)); gridPiece = p.id; wrong = null; confirmClear = false; lastRevealAt = rec.reveal || 0; }
+  if (gridPiece !== p.id) { grid = toGrid(cellsOf(p.id)); gridPiece = p.id; wrong = null; confirmClear = false; lastRevealAt = rec.reveal || 0; dirty = {}; lastHelpCount = Object.keys(rec.helpPaint || {}).length; }
   const hs = Object.entries(rec.helpers || {});
   const names = esc(josa(hs.map(([, n]) => n).join(', '), '이', '가'));
   let banner = '';
@@ -221,8 +224,9 @@ function drawSolve(m) {
   gridCtl = buildGrid(document.getElementById('gh'), {
     sol: p.sol, editable: true, tool: () => tool,
     get: (r, c) => grid[r][c],
-    set: (r, c, v) => { grid[r][c] = v; wrong = null; msgOverride = null; queueWrite(p.id); },
+    set: (r, c, v) => { grid[r][c] = v; dirty[r * grid.length + c] = v; wrong = null; msgOverride = null; queueWrite(p.id); },
     hl: currentHl, wrong: () => (wrong && Date.now() < wrongUntil ? wrong : null),
+    helped: (r, c) => !!(pieceRec(p.id).helpPaint || {})[r * grid.length + c],
     onChange: () => { if (isSolved(p.sol, grid)) finishPiece(p); else updateMsg(); },
   });
   bindTools();
@@ -245,7 +249,9 @@ function drawSolve(m) {
   if (cl) cl.onclick = () => { confirmClear = true; lastSig = ''; schedule(); };
   const cy = document.getElementById('clearYes');
   if (cy) cy.onclick = () => {
+    const n = grid.length;
     grid = grid.map((r) => r.map(() => 0)); wrong = null; msgOverride = null; confirmClear = false;
+    for (let i = 0; i < n * n; i++) dirty[i] = 0;
     flush(p.id); lastSig = ''; schedule();
   };
   const cn = document.getElementById('clearNo');
@@ -269,7 +275,7 @@ function updateMsg() {
   if (filledCount(grid) >= p.fills && !isSolved(p.sol, grid)) { el.className = 'msg bad'; el.textContent = '어딘가 틀렸어요. 힌트를 다시 살펴봐요'; }
   else { el.className = 'msg'; el.textContent = `힌트가 맞은 줄 ${ok} / ${n * 2}`; }
 }
-let pending = false;
+let pending = false, dirty = {}, lastHelpCount = 0, lastHelpToast = 0;
 function queueWrite(id) {
   pending = true;
   clearTimeout(writeTimer);
@@ -279,7 +285,21 @@ function flush(id) {
   clearTimeout(writeTimer);
   pending = false;
   if (gridPiece !== id || !grid) return Promise.resolve();
-  return net.set(`${base()}/cells/p${id}`, fromGrid(grid));
+  const d = dirty, n = grid.length; dirty = {};
+  if (!Object.keys(d).length) return Promise.resolve();
+  // 내가 지운 칸은 '친구가 칠해 준 칸' 표시도 지운다 (친구는 그만큼 다시 칠해 줄 수 있다)
+  const marks = pieceRec(id).helpPaint || {}, patch = {};
+  for (const k of Object.keys(d)) if (d[k] !== 1 && marks[k]) patch[`${base()}/pieces/p${id}/helpPaint/${k}`] = null;
+  if (Object.keys(patch).length) net.update(patch);
+  return writeCells(id, d, n);
+}
+// 바뀐 칸만 최신 판에 얹어 저장한다. 조각 주인과 도우미가 동시에 칠해도 서로의 칸을 지우지 않는다.
+function writeCells(id, diff, n) {
+  return net.transaction(`${base()}/cells/p${id}`, (cur) => {
+    const a = (cur || emptyOf(n)).split('');
+    for (const k of Object.keys(diff)) a[k] = String(diff[k]);
+    return a.join('');
+  });
 }
 async function finishPiece(p) {
   if (!R || !R.meta || R.meta.status !== 'play' || gridPiece !== p.id) return;
@@ -355,12 +375,41 @@ function drawHelp(m) {
   const p = built.pieces[m.helpTarget], r = pieceRec(p.id), o = (R.students || {})[r.owner] || {};
   const cool = hintCool > Date.now();
   app.innerHTML = '<div class="phone">' + head(`${esc(o.name)}의 <span class="px">${p.label}</span>`, 'blue', p.id) + `<div class="grid-host" id="gh"></div>
-    <div class="msg ${cool ? '' : 'hi'}">${cool ? '짚어 줬어요. 조금 뒤에 또 짚을 수 있어요' : '헷갈려 보이는 줄의 숫자를 눌러 짚어 주세요'}</div>
-    <p class="dim" style="margin:0;font-size:17px">칸은 직접 칠할 수 없어요. 친구 화면에 그 줄이 반짝여요.</p>
+    <div class="msg hi" id="helpLeft"></div>
+    <p class="dim" style="margin:0;font-size:17px">${cool ? '짚어 줬어요. 조금 뒤에 또 짚을 수 있어요.' : '내가 칠한 파란 칸은 다시 누르면 지워져요. 줄의 숫자를 누르면 친구 화면에 그 줄이 반짝여요.'}</p>
     <button class="btn ghost" id="stop">그만 돕기</button></div>`;
-  let g = toGrid(cellsOf(p.id));
+  const n = p.sol.length, limit = helpLimit(n);
+  let unsent = {}, sendTimer = 0;
+  const marks = () => { const k = new Set(Object.keys(pieceRec(p.id).helpPaint || {})); for (const i of Object.keys(unsent)) { if (unsent[i] === 1) k.add(i); else k.delete(i); } return k; };
+  const load = () => { const out = toGrid(cellsOf(p.id)); for (const i of Object.keys(unsent)) out[i / n | 0][i % n] = unsent[i]; return out; };
+  const send = () => {
+    clearTimeout(sendTimer);
+    const d = unsent; unsent = {};
+    if (!Object.keys(d).length) return Promise.resolve();
+    const patch = {};
+    for (const i of Object.keys(d)) patch[`${base()}/pieces/p${p.id}/helpPaint/${i}`] = d[i] === 1 ? sid : null;
+    net.update(patch);
+    return writeCells(p.id, d, n);
+  };
+  const showLeft = () => {
+    const el = document.getElementById('helpLeft'); if (!el) return;
+    const left = Math.max(0, limit - marks().size);
+    el.textContent = left ? `친구 판에 칠해 줄 수 있어요 · 남은 칸 ${left} / ${limit}` : `칠해 줄 칸을 다 썼어요 · 숫자를 눌러 줄을 짚어 주세요`;
+  };
+  let g = load();
   gridCtl = buildGrid(document.getElementById('gh'), {
-    sol: p.sol, editable: false, cls: 'watch', get: (rr, c) => g[rr][c], hl: currentHl,
+    sol: p.sol, editable: true, cls: 'watch', tool: () => 1, get: (rr, c) => g[rr][c], hl: currentHl,
+    helped: (rr, c) => marks().has(String(rr * n + c)),
+    set: (rr, c, v) => {
+      const i = rr * n + c;
+      if (v === 1) {
+        if (g[rr][c] !== 0) return;
+        if (marks().size >= limit) { toast(`칠해 줄 수 있는 칸은 ${limit}칸까지예요`); return; }
+      } else if (!marks().has(String(i))) { toast('친구가 칠한 칸은 지울 수 없어요'); return; }
+      unsent[i] = v; g[rr][c] = v;
+      clearTimeout(sendTimer); sendTimer = setTimeout(send, 150);
+      showLeft();
+    },
     onHint: (type, i) => {
       if (hintCool > Date.now()) return;
       hintCool = Date.now() + 5000;
@@ -370,10 +419,11 @@ function drawHelp(m) {
     },
   });
   const refresh = gridCtl.refresh;
-  gridCtl.refresh = () => { g = toGrid(cellsOf(p.id)); refresh(); };
-  document.getElementById('stop').onclick = () => net.update({
+  gridCtl.refresh = () => { g = load(); refresh(); showLeft(); };
+  showLeft();
+  document.getElementById('stop').onclick = () => { send(); net.update({
     [`${base()}/students/${sid}/mode`]: 'free', [`${base()}/students/${sid}/helpTarget`]: null, [`${base()}/pieces/p${p.id}/helpers/${sid}`]: null,
-  });
+  }); };
 }
 
 // ───── 꾸미기 퍼즐 ─────

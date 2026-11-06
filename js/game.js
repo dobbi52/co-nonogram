@@ -1,9 +1,10 @@
 // 게임 규칙과 공용 도구: 조각 배치, 힌트, 풀이 검사, 꾸미기 장식, 노노그램 판
-import { PICTURES } from './pictures.js?v=1106-1239';
+import { PICTURES } from './pictures.js?v=1106-1245';
 
 export const MARGIN = 5;        // 큰 그림 둘레 장식 테두리 칸 수
 export const MAX_HELPERS = 2;   // 한 조각에 들어올 수 있는 도우미 수
 export const CHECKS_PER_PIECE = 1; // 조각마다 쓸 수 있는 검사하기 횟수
+export const helpLimit = (n) => (n >= 10 ? 10 : 5); // 도우미가 한 조각에 칠해 줄 수 있는 칸 수 (10×10은 10칸, 7×7은 5칸)
 export const ROWL = 'ABCDE';
 
 // ox, oy: 60×50 그림에서 잘라 쓸 위치(조각 단위). 조각 경계로 자르므로 조각마다 퍼즐 검사는 유지된다
@@ -232,6 +233,7 @@ export function buildGrid(host, o) {
     for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
       const v = o.get(r, c), ce = cells[r][c], w = !!wrong && wrong.has(r * n + c);
       ce.classList.toggle('f', v === 1 && !w); ce.classList.toggle('w', w); ce.classList.toggle('x', v === 2);
+      ce.classList.toggle('h', v === 1 && !w && !!o.helped && o.helped(r, c)); // 친구가 칠해 준 칸
       ce.classList.toggle('hl', !!h && ((h.type === 'row' && h.i === r) || (h.type === 'col' && h.i === c)));
     }
     for (let i = 0; i < n; i++) {

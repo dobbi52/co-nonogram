@@ -1,7 +1,7 @@
 // 서버 연결. Firebase Realtime Database가 설정되어 있으면 그것을 쓰고,
 // 없으면 같은 브라우저의 창끼리 localStorage + BroadcastChannel로 연결하는 시험 모드로 돈다.
 // 두 방식 모두 같은 함수(set, update, push, on, ...)로 쓴다. 경로는 'rooms/1234/pieces/3' 처럼 쓴다.
-import { firebaseConfig } from './firebase-config.js?v=1106-1239';
+import { firebaseConfig } from './firebase-config.js?v=1106-1245';
 
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
 let impl = null;
@@ -75,6 +75,8 @@ export const get = (p) => limit(impl.get(p));
 export const onConnection = (cb) => (impl.onConnection ? impl.onConnection(cb) : cb(true));
 export const on = (p, cb) => impl.on(p, cb); // 값이 바뀔 때마다 cb(value). 끊는 함수를 돌려준다
 export const push = (p, v) => impl.push(p, v);
+// 여러 사람이 같은 값을 고칠 때 서로 덮어쓰지 않게 최신 값 위에 바꾼다. fn(지금 값) → 새 값
+export const transaction = (p, fn) => limit(impl.transaction(p, fn));
 export const onDisconnect = (patch) => impl.onDisconnect(patch);
 
 // ───── Firebase ─────
@@ -93,6 +95,7 @@ async function firebaseImpl() {
   if (!longPoll) watchConnection(db, d);
   return {
     set: (p, v) => db.set(r(p), v),
+    transaction: (p, fn) => db.runTransaction(r(p), fn),
     update: (patch) => db.update(db.ref(d), patch),
     get: async (p) => (await db.get(r(p))).val(),
     on: (p, cb) => db.onValue(r(p), (s) => cb(s.val())),
@@ -148,6 +151,7 @@ function localImpl() {
   window.addEventListener('storage', (e) => { if (e.key === KEY) remote(); });
   return {
     set: async (p, v) => { write(p, v); save(); notify(); },
+    transaction: async (p, fn) => { load(); write(p, fn(read(p) ?? null)); save(); notify(); },
     update: async (patch) => { for (const [p, v] of Object.entries(patch)) write(p, v); save(); notify(); },
     get: async (p) => { load(); const v = read(p); return v == null ? null : JSON.parse(JSON.stringify(v)); },
     on: (p, cb) => {
