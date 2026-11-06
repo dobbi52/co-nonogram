@@ -1,7 +1,7 @@
 // 서버 연결. Firebase Realtime Database가 설정되어 있으면 그것을 쓰고,
 // 없으면 같은 브라우저의 창끼리 localStorage + BroadcastChannel로 연결하는 시험 모드로 돈다.
 // 두 방식 모두 같은 함수(set, update, push, on, ...)로 쓴다. 경로는 'rooms/1234/pieces/3' 처럼 쓴다.
-import { firebaseConfig } from './firebase-config.js?v=1106-1255';
+import { firebaseConfig } from './firebase-config.js?v=1106-1350';
 
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
 let impl = null;
@@ -93,6 +93,12 @@ async function firebaseImpl() {
   const d = db.getDatabase(a);
   const r = (p) => db.ref(d, p);
   if (!longPoll) watchConnection(db, d);
+  // 생각 오락실에 '몇 명 접속 중'을 보여 주려고 접속 중인 기기마다 presence에 한 줄을 둔다 (창을 닫으면 지워짐)
+  const here = db.ref(d, 'presence/' + myUid);
+  db.onValue(db.ref(d, '.info/connected'), (s) => {
+    if (!s.val()) return;
+    db.onDisconnect(here).remove().then(() => db.set(here, true)).catch(() => {});
+  });
   return {
     set: (p, v) => db.set(r(p), v),
     transaction: (p, fn) => db.runTransaction(r(p), fn),
