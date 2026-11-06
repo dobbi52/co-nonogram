@@ -1,9 +1,9 @@
 // 전자칠판(선생님) 화면: 방 만들기 → 대기실 → 함께 푸는 칠판 → 완성
 // 칠판 화면은 "진행 맡은 칠판"으로서 조각 배정, 자리 비운 학생 정리, 완성 판정을 맡는다.
-import * as net from './net.js?v=1106-1350';
-import { app, brand, modeNotice, toast, go, joinUrl, verLine } from './ui.js?v=1106-1350';
-import * as music from './music.js?v=1106-1350';
-import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorSlots, esc, shuffle, EMPTY, MAX_HELPERS, CHECKS_PER_PIECE, buildGrid, toGrid, fromGrid, emptyOf, PIECE_SIZES, levelButtons, levelPatch } from './game.js?v=1106-1350';
+import * as net from './net.js?v=1106-1415';
+import { app, brand, modeNotice, toast, go, joinUrl, verLine } from './ui.js?v=1106-1415';
+import * as music from './music.js?v=1106-1415';
+import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorSlots, esc, shuffle, EMPTY, MAX_HELPERS, CHECKS_PER_PIECE, buildGrid, toGrid, fromGrid, emptyOf, PIECE_SIZES, levelButtons, levelPatch } from './game.js?v=1106-1415';
 
 const OFFLINE_RELEASE_MS = 45000; // 조각을 맡은 학생이 이만큼 접속이 끊기면 조각을 다른 학생에게 넘긴다
 const setup = { pieces: 25, size: 10, picture: PICTURES[0].id };
@@ -261,7 +261,7 @@ function hostTick() {
       else { patch[`students/${sid}/mode`] = s.mode === 'wait' ? 'free' : s.mode; patch[`students/${sid}/want`] = null; }
     }
     // 돕던 조각이 끝났으면 자유 상태로
-    if (s.mode === 'help' && (s.helpTarget == null || rec(s.helpTarget).done || !rec(s.helpTarget).owner)) {
+    if (s.mode === 'help' && (s.helpTarget == null || rec(s.helpTarget).done || !rec(s.helpTarget).owner || R.meta.noHelp || rec(s.helpTarget).noHelp)) {
       patch[`students/${sid}/mode`] = 'free'; patch[`students/${sid}/helpTarget`] = null;
     }
   }
@@ -354,19 +354,35 @@ function renderPlay() {
 
 // ───── 잠깐 멈추기 / 여기서 끝내기 ─────
 let confirmEnd = false, ctrlSig = '';
+// 그 조각의 도우미를 모두 내보내고 '도와줘' 요청도 지운다 (이미 칠한 칸은 그대로)
+function stopHelpers(id) {
+  const rec = pieceRec(id), patch = {};
+  if (rec.request) patch[`rooms/${code}/pieces/p${id}/request`] = null;
+  for (const hid of Object.keys(rec.helpers || {})) {
+    patch[`rooms/${code}/pieces/p${id}/helpers/${hid}`] = null;
+    patch[`rooms/${code}/students/${hid}/mode`] = 'free'; patch[`rooms/${code}/students/${hid}/helpTarget`] = null;
+  }
+  return patch;
+}
 function renderCtrl() {
   const el = document.getElementById('ctrl'); if (!el) return;
-  const sig = [!!R.meta.paused, confirmEnd].join('|');
+  const sig = [!!R.meta.paused, confirmEnd, !!R.meta.noHelp].join('|');
   if (sig === ctrlSig && el.childElementCount) return;
   ctrlSig = sig;
   el.innerHTML = confirmEnd
     ? `<span class="chip" style="border-color:var(--pink);color:var(--pink)">정말 끝낼까요?</span><button class="chip end" id="endYes">끝내기</button><button class="chip" id="endNo">취소</button>`
-    : `<button class="chip" id="pauseBtn">${R.meta.paused ? '▶ 다시 하기' : 'Ⅱ 잠깐 멈추기'}</button><button class="chip" id="endBtn">여기서 끝내기</button>`;
+    : `<button class="chip" id="pauseBtn">${R.meta.paused ? '▶ 다시 하기' : 'Ⅱ 잠깐 멈추기'}</button><button class="chip" id="helpAll" aria-pressed="${!R.meta.noHelp}">${R.meta.noHelp ? '친구 돕기 꺼짐' : '친구 돕기 켜짐'}</button><button class="chip" id="endBtn">여기서 끝내기</button>`;
   const b = (id, fn) => { const x = document.getElementById(id); if (x) x.onclick = fn; };
   b('pauseBtn', () => {
     const m = R.meta, now = Date.now();
     if (m.paused) net.update({ [`rooms/${code}/meta/paused`]: null, [`rooms/${code}/meta/pausedAt`]: null, [`rooms/${code}/meta/pausedMs`]: (m.pausedMs || 0) + (now - (m.pausedAt || now)) });
     else net.update({ [`rooms/${code}/meta/paused`]: true, [`rooms/${code}/meta/pausedAt`]: now });
+  });
+  b('helpAll', () => {
+    if (R.meta.noHelp) { net.update({ [`rooms/${code}/meta/noHelp`]: null }); toast('친구 돕기를 켰어요'); return; }
+    const patch = { [`rooms/${code}/meta/noHelp`]: true };
+    for (const p of built.pieces) Object.assign(patch, stopHelpers(p.id));
+    net.update(patch); toast('반 전체 친구 돕기를 껐어요');
   });
   b('endBtn', () => { confirmEnd = true; renderCtrl(); });
   b('endNo', () => { confirmEnd = false; renderCtrl(); });
@@ -491,7 +507,7 @@ function refreshPanel(force) {
   const hs = Object.values(rec.helpers || {});
   const left = CHECKS_PER_PIECE + (rec.bonus || 0) - (rec.checks || 0);
   const w = wrongSet(p);
-  const sig = [rec.done, rec.owner, hs.join(), left, panelWrong, panelCool > Date.now(), !!rec.request, o && o.online, tTool, built.levelOf(panelId), panelLevelAsk].join('|');
+  const sig = [rec.done, rec.owner, hs.join(), left, panelWrong, panelCool > Date.now(), !!rec.request, o && o.online, tTool, built.levelOf(panelId), panelLevelAsk, !!rec.noHelp, !!R.meta.noHelp].join('|');
   if (panelGrid && panelGrid.isDragging()) return;
   if (!force && sig === panelSig && panelGrid) {
     // 칠한 칸이 바뀌면 판과 숫자만 고친다 (다시 그리면 선생님이 누르던 칸을 놓친다)
@@ -519,6 +535,7 @@ function refreshPanel(force) {
       <button class="btn ghost small" id="pWrong" aria-pressed="${panelWrong}">${panelWrong ? '틀린 칸 숨기기' : `틀린 칸 보기 (${w.size})`}</button>
       <button class="btn small pink" id="pReveal" ${w.size ? '' : 'disabled'}>학생에게 틀린 칸 보여 주기</button>
       <button class="btn small yellow" id="pBonus">검사하기 1번 더 주기</button>
+      ${R.meta.noHelp ? '<button class="btn ghost small" disabled>반 전체 돕기 꺼짐</button>' : `<button class="btn ghost small" id="pHelp" aria-pressed="${!rec.noHelp}">${rec.noHelp ? '돕기 다시 허용' : '돕기 그만'}</button>`}
     </div>
     <span class="dim" style="font-size:15px">틀린 칸 보기는 이 화면에만 보여요. 칠판이 반 전체에 보인다면 선생님 폰에서 여세요.</span>
   </div>`;
@@ -537,6 +554,12 @@ function refreshPanel(force) {
     },
   });
   document.getElementById('pClose').onclick = closePanel;
+  const pHelp = document.getElementById('pHelp');
+  if (pHelp) pHelp.onclick = () => {
+    if (rec.noHelp) { net.update({ [`rooms/${code}/pieces/p${p.id}/noHelp`]: null }); toast(`${o.name}의 조각에 돕기를 다시 허용했어요`); return; }
+    net.update({ ...stopHelpers(p.id), [`rooms/${code}/pieces/p${p.id}/noHelp`]: true });
+    toast(`${o.name}의 조각에 돕기를 멈췄어요`);
+  };
   const setPanelLevel = (lv) => {
     panelLevelAsk = null; clearTimeout(tTimer); tPending = false; panelWrong = false;
     net.update(levelPatch(`rooms/${code}`, p.id, lv, rec.owner));

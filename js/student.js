@@ -1,7 +1,7 @@
 // 학생 화면: 코드로 들어가기 → 기다리기 → 내 조각 풀기 / 친구 돕기 / 꾸미기 퍼즐 → 완성
-import * as net from './net.js?v=1106-1350';
-import { app, brand, modeNotice, toast, go, verLine } from './ui.js?v=1106-1350';
-import { buildPieces, josa, LEVELS, LEVEL_KEYS, decorSlots, SPRITES, esc, emptyOf, toGrid, fromGrid, isSolved, lineMatches, filledCount, buildGrid, MAX_HELPERS, CHECKS_PER_PIECE, helpLimit, levelButtons, levelPatch } from './game.js?v=1106-1350';
+import * as net from './net.js?v=1106-1415';
+import { app, brand, modeNotice, toast, go, verLine } from './ui.js?v=1106-1415';
+import { buildPieces, josa, LEVELS, LEVEL_KEYS, decorSlots, SPRITES, esc, emptyOf, toGrid, fromGrid, isSolved, lineMatches, filledCount, buildGrid, MAX_HELPERS, CHECKS_PER_PIECE, helpLimit, levelButtons, levelPatch } from './game.js?v=1106-1415';
 
 let code = null, sid = null, myName = '', myLevel = 'normal', R = null, built = null, unsub = null, raf = 0;
 let lastSig = '', gridCtl = null, tool = 1;
@@ -114,9 +114,9 @@ function showKicked() {
 function signature() {
   const m = me(); const st = R.meta.status;
   const parts = [st, !!R.meta.paused, m && m.mode, m && m.piece, m && m.helpTarget, m && m.want, decor && decor.done, m && m.level];
-  if (m && m.mode === 'solve') { const r = pieceRec(m.piece); parts.push(Object.keys(r.helpers || {}).join(), !!r.request, r.checks || 0, r.bonus || 0, confirmClear, confirmLevel, built.levelOf(m.piece)); }
+  if (m && m.mode === 'solve') { const r = pieceRec(m.piece); parts.push(Object.keys(r.helpers || {}).join(), !!r.request, r.checks || 0, r.bonus || 0, confirmClear, confirmLevel, built.levelOf(m.piece), !!R.meta.noHelp, !!r.noHelp); }
   if (m && m.mode === 'free') {
-    parts.push(built.pieces.filter((p) => !pieceRec(p.id).done && !pieceRec(p.id).owner).length,
+    parts.push(!!R.meta.noHelp, built.pieces.filter((p) => pieceRec(p.id).noHelp).map((p) => p.id).join(), built.pieces.filter((p) => !pieceRec(p.id).done && !pieceRec(p.id).owner).length,
       built.pieces.map((p) => { const r = pieceRec(p.id); return r.done ? 'd' : (r.owner ? (r.request ? 'r' : 'o') + Object.keys(r.helpers || {}).length : '-'); }).join(''),
       Math.floor(Date.now() / 8000));
   }
@@ -132,7 +132,7 @@ function render() {
     return;
   }
   // 돕던 친구가 사양했을 때 알림
-  if (prevMode === 'help' && m.mode === 'free' && prevTarget != null && !pieceRec(prevTarget).done) toast('친구가 혼자 풀어 보고 싶대요');
+  if (prevMode === 'help' && m.mode === 'free' && prevTarget != null && !pieceRec(prevTarget).done) toast(R.meta.noHelp || pieceRec(prevTarget).noHelp ? '선생님이 돕기를 멈췄어요' : '친구가 혼자 풀어 보고 싶대요');
   prevMode = m.mode; prevTarget = m.helpTarget;
   adoptRemote(m);
   const sig = signature();
@@ -227,7 +227,7 @@ function drawSolve(m) {
     <div class="msg" id="msg"></div>${toolsHtml()}
     ${confirmClear
       ? `<div class="banner pink"><span>정말 다 지울까요?</span><span class="row" style="gap:8px"><button class="btn small pink" id="clearYes">지우기</button><button class="btn small ghost" id="clearNo">취소</button></span></div>`
-      : `<div class="subtools three">${rec.request || hs.length ? '<span></span>' : '<button class="btn ghost small" id="ask">도와줘</button>'}
+      : `<div class="subtools three">${rec.request || hs.length || R.meta.noHelp || rec.noHelp ? '<span></span>' : '<button class="btn ghost small" id="ask">도와줘</button>'}
       <button class="btn ghost small" id="check" ${left > 0 ? '' : 'disabled'}>검사하기 ${left > 0 ? `(${left})` : '(다 씀)'}</button>
       <button class="btn ghost small" id="clear">전체 지우기</button></div>`}
     ${confirmLevel
@@ -367,15 +367,16 @@ function drawFree(m) {
   const P = built.pieces;
   const free = P.filter((p) => !pieceRec(p.id).done && !pieceRec(p.id).owner);
   const S = R.students || {};
-  const open = P.filter((p) => { const r = pieceRec(p.id); return !r.done && r.owner && r.owner !== sid && Object.keys(r.helpers || {}).length < MAX_HELPERS; });
+  const open = P.filter((p) => { const r = pieceRec(p.id); return !R.meta.noHelp && !r.noHelp && !r.done && r.owner && r.owner !== sid && Object.keys(r.helpers || {}).length < MAX_HELPERS; });
   const reqs = open.filter((p) => pieceRec(p.id).request);
   const others = open.filter((p) => !pieceRec(p.id).request && !(S[pieceRec(p.id).owner] || {}).declined).sort((a, b) => progressOf(a) - progressOf(b)).slice(0, 5);
   const row = (p, req) => { const o = S[pieceRec(p.id).owner] || {}; return `<div class="friend${req ? ' req' : ''}"><span>${esc(o.name)} <span class="px">${p.label} · ${Math.round(progressOf(p) * 100)}%</span>${req ? ' <span style="color:var(--pink)">도와줘!</span>' : ''}</span><button class="btn small${req ? ' pink' : ' ghost'}" data-help="${p.id}">도와주러 가기</button></div>`; };
   let body = `<div class="pane"><h3>${justDone ? esc(justDone) + ' 완성!' : '무엇을 할까요?'}</h3>`;
   if (free.length) body += `<p>아직 아무도 안 맡은 조각이 ${free.length}개 있어요.</p><button class="btn" id="want" ${m.want ? 'disabled' : ''}>${m.want ? '조각 받는 중…' : '남은 조각 풀기'}</button>`;
-  else body += `<p>조각은 다 나눠졌어요. 친구를 돕거나 장식을 만들어요.</p>`;
+  else body += `<p>조각은 다 나눠졌어요. ${R.meta.noHelp ? '장식을 만들어요.' : '친구를 돕거나 장식을 만들어요.'}</p>`;
+  if (R.meta.noHelp) body += '<p class="dim">지금은 선생님이 친구 돕기를 꺼 두었어요.</p>';
   body += reqs.map((p) => row(p, true)).join('') + others.map((p) => row(p, false)).join('');
-  if (!free.length && !reqs.length && !others.length) body += '<p>지금은 도울 수 있는 친구가 없어요.</p>';
+  if (!R.meta.noHelp && !free.length && !reqs.length && !others.length) body += '<p>지금은 도울 수 있는 친구가 없어요.</p>';
   body += `<button class="btn yellow" id="goDecor">꾸미기 퍼즐 하기</button>
     <div class="field"><span style="font-size:17px">다음 조각 난이도</span>${levelSeg(m.level || 'normal')}</div></div>`;
   app.innerHTML = '<div class="phone">' + head('잘했어!', '', -1) + body + '</div>';
@@ -387,6 +388,7 @@ function drawFree(m) {
 }
 function joinHelp(id) {
   const r = pieceRec(id);
+  if (R.meta.noHelp || r.noHelp) { toast('선생님이 돕기를 꺼 두었어요'); return; }
   if (r.done || !r.owner || Object.keys(r.helpers || {}).length >= MAX_HELPERS) { toast('이미 친구가 다 찼어요'); return; }
   const m = me();
   net.update({
