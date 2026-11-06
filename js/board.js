@@ -1,8 +1,9 @@
 // 전자칠판(선생님) 화면: 방 만들기 → 대기실 → 함께 푸는 칠판 → 완성
 // 칠판 화면은 "진행 맡은 칠판"으로서 조각 배정, 자리 비운 학생 정리, 완성 판정을 맡는다.
-import * as net from './net.js?v=1104-1107';
-import { app, brand, modeNotice, toast, go, joinUrl, verLine } from './ui.js?v=1104-1107';
-import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorSlots, esc, shuffle, EMPTY, MAX_HELPERS, CHECKS_PER_PIECE, buildGrid, toGrid, fromGrid, emptyOf, PIECE_SIZES } from './game.js?v=1104-1107';
+import * as net from './net.js?v=1106-1009';
+import { app, brand, modeNotice, toast, go, joinUrl, verLine } from './ui.js?v=1106-1009';
+import * as music from './music.js?v=1106-1009';
+import { LAYOUTS, LEVELS, PICTURES, buildPieces, drawPicture, placeTiles, decorSlots, esc, shuffle, EMPTY, MAX_HELPERS, CHECKS_PER_PIECE, buildGrid, toGrid, fromGrid, emptyOf, PIECE_SIZES } from './game.js?v=1106-1009';
 
 const OFFLINE_RELEASE_MS = 45000; // 조각을 맡은 학생이 이만큼 접속이 끊기면 조각을 다른 학생에게 넘긴다
 const setup = { pieces: 25, size: 10, picture: PICTURES[0].id };
@@ -121,18 +122,30 @@ const clock = () => {
   const m = R.meta, end = m.endedAt || (m.paused ? m.pausedAt : Date.now());
   const t = Math.max(0, Math.floor((end - m.startedAt - (m.pausedMs || 0)) / 1000)); return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); };
 const fullBtn = () => `<button class="chip" id="full">전체 화면</button>`;
+const musicLabel = () => music.isEnabled() ? '♪ 음악 켜짐' : '♪ 음악 꺼짐';
 function bindTop() {
   const f = document.getElementById('full');
   if (f) f.onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.().catch(() => {}); };
+  const mb = document.getElementById('musicBtn');
+  if (mb) mb.onclick = () => { music.toggle(); mb.textContent = musicLabel(); };
   const tk = document.getElementById('takeHost');
   if (tk) tk.onclick = () => { try { localStorage.setItem(hostKey(code), '1'); } catch (_) {} isHost = true; view = ''; hostTick(); schedule(); };
 }
 const hostNote = () => isHost ? '' : `<div class="notice"><b>선생님 화면</b> · 보면서 학생을 도울 수 있어요. 조각 배정은 방을 만든 칠판이 맡아요. 그 칠판이 꺼졌을 때만 <button class="btn small" id="takeHost">이 화면으로 진행하기</button></div>`;
 const teacherUrl = () => { const u = new URL(location.href); u.search = '?board=' + code; u.hash = ''; return u.toString(); };
 
+// 배경음악은 진행 맡은 칠판에서만 나온다 (학생 기기와 선생님 폰은 조용히)
+let musicStatus = null;
+function syncMusic() {
+  const m = R.meta, st = m.status;
+  if (isHost && st === 'done' && musicStatus === 'play' && !m.stopped) music.fanfare();
+  music.setState(isHost && st === 'play' ? (m.paused ? 'hold' : 'play') : 'off');
+  musicStatus = st;
+}
 function render() {
   if (!R || !R.meta) return;
   const st = R.meta.status;
+  syncMusic();
   if (st === 'lobby') renderLobby();
   else if (st === 'play') renderPlay();
   else renderResult();
@@ -182,6 +195,7 @@ function startGame() {
   if (!isHost) return;
   net.update({ [`rooms/${code}/meta/status`]: 'play', [`rooms/${code}/meta/startedAt`]: Date.now() });
   net.push(`rooms/${code}/log`, { who: '', what: '시작!', at: Date.now() });
+  music.setState('play'); // 누른 순간에 소리를 풀어 둔다
 }
 
 // ───── 진행 맡은 칠판이 하는 일 ─────
@@ -251,7 +265,7 @@ function renderPlay() {
     view = 'play';
     app.innerHTML = `<div class="top">${brand('PIXEL NONOGRAM')}<div class="chips">
       <div class="chip code">CODE <b>${esc(code)}</b></div><div class="chip size">${L.n}조각 · ${built.n}×${built.n}</div>
-      <div class="chip">접속 <span class="px" id="online" style="font-size:12px;color:var(--green)">0</span>명</div><span class="chips" id="ctrl"></span>${fullBtn()}</div></div>
+      <div class="chip">접속 <span class="px" id="online" style="font-size:12px;color:var(--green)">0</span>명</div><span class="chips" id="ctrl"></span>${isHost ? `<button class="chip" id="musicBtn">${musicLabel()}</button>` : ''}${fullBtn()}</div></div>
     <div class="notice paused" id="pausedNote" hidden><b>잠깐 멈춤</b> · 학생들은 지금 칠할 수 없어요. <b>다시 하기</b>를 누르면 이어서 풀어요.</div>
     <div class="stage">
       <div class="board-col">

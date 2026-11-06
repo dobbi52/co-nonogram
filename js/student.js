@@ -1,7 +1,7 @@
 // 학생 화면: 코드로 들어가기 → 기다리기 → 내 조각 풀기 / 친구 돕기 / 꾸미기 퍼즐 → 완성
-import * as net from './net.js?v=1104-1107';
-import { app, brand, modeNotice, toast, go, verLine } from './ui.js?v=1104-1107';
-import { buildPieces, josa, LEVELS, LEVEL_KEYS, decorSlots, SPRITES, esc, emptyOf, toGrid, fromGrid, isSolved, lineMatches, filledCount, buildGrid, MAX_HELPERS, CHECKS_PER_PIECE } from './game.js?v=1104-1107';
+import * as net from './net.js?v=1106-1009';
+import { app, brand, modeNotice, toast, go, verLine } from './ui.js?v=1106-1009';
+import { buildPieces, josa, LEVELS, LEVEL_KEYS, decorSlots, SPRITES, esc, emptyOf, toGrid, fromGrid, isSolved, lineMatches, filledCount, buildGrid, MAX_HELPERS, CHECKS_PER_PIECE } from './game.js?v=1106-1009';
 
 let code = null, sid = null, myName = '', myLevel = 'normal', R = null, built = null, unsub = null, raf = 0;
 let lastSig = '', gridCtl = null, tool = 1;
